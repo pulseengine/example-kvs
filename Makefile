@@ -49,7 +49,7 @@ wit:
 # reports PASSED / FAILED / MISSING per artifact. Exits 1 if any
 # FAILED or MISSING.
 verify:
-	@$(PYTHON) tools/verify.py --artifacts artifacts --tests verification
+	@$(PYTHON) tools/verify.py --artifacts artifacts
 
 # ── sigil-signed release manifest (optional) ────────────────────────
 attest:
