@@ -11,9 +11,17 @@ SCHEMAS := vendor/rivet-schemas
 .PHONY: all validate aadl wit verify attest clean
 
 # Default: run all checks that work without external dependencies
-# (rivet and the verification gate). aadl/wit/attest are optional —
-# they require spar / sigil to be installed.
-all: validate verify
+# (rivet, the verification gate, and the Bazel WASM-component build).
+# aadl/wit/attest are optional — they require spar / sigil installed.
+all: validate verify bazel
+
+# ── Bazel: real WASM-component build (AADL → WIT → bindgen → component) ─
+bazel:
+	@command -v bazelisk >/dev/null 2>&1 || command -v bazel >/dev/null 2>&1 || { \
+	    echo "bazel(isk) not in PATH — skipping WASM-component build"; \
+	    exit 0; }
+	@$(if $(shell command -v bazelisk),bazelisk,bazel) build //...
+	@$(if $(shell command -v bazelisk),bazelisk,bazel) test  //...
 
 # ── rivet typed-artifact validation (always runs) ───────────────────
 validate:

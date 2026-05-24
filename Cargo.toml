@@ -1,0 +1,28 @@
+# Cargo.toml for example-kvs.
+#
+# Exists so MODULE.bazel's crate.from_cargo can materialise the
+# @crates repository that rules_wasm_component's
+# rust_wasm_component_bindgen depends on. rules_wasm_component
+# (as of 2026-05) hardcodes `@crates//:wit-bindgen` for the
+# generated-bindings runtime and `@crates//:bitflags` for WASI
+# filesystem interfaces — external consumers must provide both via
+# crate_universe.
+#
+# This is a known wart in rules_wasm_component (the rule docstring
+# says so explicitly). A future version that ships wit-bindgen-rt
+# internally would eliminate the need for this file.
+
+[package]
+name = "example-kvs-cargo-shim"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+bitflags = "2"
+wit-bindgen = "0.46"
+
+# Forced [workspace] section to make this a non-workspace single
+# crate so crate_universe resolves cleanly without scanning a
+# parent workspace that might not exist.
+[workspace]

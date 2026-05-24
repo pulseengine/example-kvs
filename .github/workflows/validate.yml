@@ -39,3 +39,23 @@ jobs:
 
       - name: artifact-driven verification gate
         run: make verify
+
+  bazel-wasm-component:
+    name: bazel build (AADL → WIT → wasm component)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bazelisk
+        run: |
+          curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 \
+              -o /usr/local/bin/bazelisk
+          chmod +x /usr/local/bin/bazelisk
+          ln -s /usr/local/bin/bazelisk /usr/local/bin/bazel
+          bazel --version
+
+      - name: bazel build //... (WIT → wit-bindgen → rust_component → .wasm)
+        run: bazel build //...
+
+      - name: bazel test //... (rust_wasm_component_test)
+        run: bazel test //... --test_output=errors

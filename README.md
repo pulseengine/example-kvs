@@ -35,22 +35,21 @@ eclipse's setup doesn't have:
 
 ## What's *real* infrastructure vs *example skeleton*
 
-Everything in `artifacts/` validates today with `make validate`
-against the pinned rivet schemas. The artifact-driven verification
-gate (`tools/verify.py`) runs today as a stub.
+| Layer | State |
+|---|---|
+| `rivet validate` on `artifacts/*.yaml` | ✅ **Builds + passes** locally and in CI |
+| `tools/verify.py` artifact-driven gate | ✅ **Builds + passes** locally and in CI |
+| `bazel build //...` — AADL → WIT → wit-bindgen → Rust → .wasm component | ✅ **Builds + passes** locally (`bazel test //:kvs_component_test` green); CI builds it on every push |
+| `make aadl` / `make wit` via `spar` | ⚙️ Optional — requires `spar` installed; skips cleanly if missing |
+| `verification/mc_dc_harness.rs` witness annotations | 📄 **Skeleton** showing what witness-instrumented tests look like; not wired into a witness build yet |
+| `attestation/release-manifest.yaml` sigil-shape | 📄 **Skeleton** showing the manifest shape; `make attest` skips cleanly if sigil missing |
 
-The AADL → WIT → Rust component chain is **real pulseengine
-infrastructure** — `rules_wasm_component`'s `wit_library` /
-`wit_bindgen` / `cpp_component` / `rust_component` Bazel rules,
-fed by spar's AADL frontend. The chain has been exercised on
-other pulseengine projects; this example is the first time it's
-been applied to eclipse-score content. The Rust component
-implementation itself is not in this repo — it would live in a
-separate crate that depends on the WIT contract.
-
-Witness and sigil entries are skeletons showing the artifact
-shape; they show what the evidence and attestation would look
-like, not a populated run.
+The headline: **the AADL → WIT → wit-bindgen → Rust → .wasm
+component chain actually builds**. `src/lib.rs` implements the
+`Guest` trait that wit-bindgen generated from `arch/kvs.wit`; if
+a signature drifts, the Rust compile fails. The binary contract
+is real, not aspirational. This is the central operational
+difference from eclipse-score's interface-as-documentation model.
 
 ## Layout
 
