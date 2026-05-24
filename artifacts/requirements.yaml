@@ -1,0 +1,206 @@
+# Eclipse-score persistency::kvs requirements chain — pulseengine shape.
+#
+# Subset (8 reqs across stkh/feat/comp) covering the realistic safety-
+# critical persistence path: stable storage with snapshots and integrity
+# checking, ASIL-B, no dynamic allocation post-init.
+#
+# Eclipse equivalents shown in the description: each pulseengine
+# artifact mirrors one upstream sphinx-needs need.
+
+artifacts:
+
+  # ── Stakeholder requirements ───────────────────────────────────────
+
+  - id: STKH-REQ-PERSIST-STORAGE
+    type: stkh-req
+    title: Persistent storage capability
+    status: approved
+    description: >
+      The SW-platform shall provide persistent storage for application
+      data that survives power-cycles and software updates.
+      Eclipse: stkh_req__overall_goals__support_of_store.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      rationale: >
+        Foundational for any ECU that must retain calibration,
+        learned values, or diagnostic data across ignition cycles.
+    tags: [persistency, stakeholder]
+
+  - id: STKH-REQ-PERSIST-INTEGRITY
+    type: stkh-req
+    title: Stored-data integrity
+    status: approved
+    description: >
+      The SW-platform shall detect corruption of persisted data
+      caused by power-loss-during-write or media degradation.
+      Eclipse: stkh_req__overall_goals__data_integrity.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, stakeholder, integrity]
+
+  # ── Feature requirements ───────────────────────────────────────────
+
+  - id: FEAT-REQ-PERSIST-STORE
+    type: feat-req
+    title: Store data
+    status: approved
+    description: >
+      The persistency feature shall accept (key, value) pairs and
+      persist them durably across power cycles.
+      Eclipse: feat_req__persistency__store_data.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Verify by writing N keys, power-cycling, re-opening, reading
+        all N keys back. Pass iff values match input set.
+    tags: [persistency, feature]
+    links:
+      - type: satisfies
+        target: STKH-REQ-PERSIST-STORAGE
+
+  - id: FEAT-REQ-PERSIST-LOAD
+    type: feat-req
+    title: Load data
+    status: approved
+    description: >
+      The persistency feature shall retrieve a previously-stored
+      value by key, or report not-found.
+      Eclipse: feat_req__persistency__load_data.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, feature]
+    links:
+      - type: satisfies
+        target: STKH-REQ-PERSIST-STORAGE
+
+  - id: FEAT-REQ-PERSIST-INTEGRITY-CHECK
+    type: feat-req
+    title: Integrity check on load
+    status: approved
+    description: >
+      The persistency feature shall compute and verify a checksum
+      on every load, returning an error rather than corrupted data
+      when verification fails.
+      Eclipse: feat_req__persistency__integrity_check.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, feature, integrity]
+    links:
+      - type: satisfies
+        target: STKH-REQ-PERSIST-INTEGRITY
+
+  - id: FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC
+    type: feat-req
+    title: No dynamic allocation post-init
+    status: approved
+    description: >
+      The persistency feature shall not perform heap allocation
+      after initialization (no malloc/free on the hot path).
+      Eclipse: feat_req__persistency__dynamic_memory_alloc.
+    fields:
+      req-type: non-functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Static analysis confirms no allocator calls on the post-init
+        code path; runtime check verifies sbrk delta is zero across
+        N operations.
+    tags: [persistency, feature, memory]
+    links:
+      - type: satisfies
+        target: STKH-REQ-PERSIST-STORAGE
+
+  # ── Component requirements ─────────────────────────────────────────
+
+  - id: COMP-REQ-KVS-KEY-NAMING
+    type: comp-req
+    title: Key Naming
+    status: approved
+    description: >
+      Keys shall be UTF-8 strings of length 1..255 containing only
+      [A-Za-z0-9_./-] and shall not start with '.'.
+      Eclipse: comp_req__kvs__key_naming.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Unit tests cover the alphabet, length boundaries
+        (0, 1, 255, 256), and the leading-dot rejection.
+    tags: [persistency, kvs, keys]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-STORE
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: COMP-REQ-KVS-VALUE-CHECKSUM
+    type: comp-req
+    title: Per-value checksum
+    status: approved
+    description: >
+      Each stored value shall carry a CRC32C checksum computed at
+      store time and verified at load time.
+      Eclipse: comp_req__kvs__pers_data_csum.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Fault-injection test flips bytes in storage between store
+        and load; load must return IntegrityError, not corrupt value.
+    tags: [persistency, kvs, integrity]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-INTEGRITY-CHECK
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: COMP-REQ-KVS-ATOMIC-STORE
+    type: comp-req
+    title: Atomic store under power loss
+    status: approved
+    description: >
+      A store operation shall either complete fully and durably
+      or leave the previous value intact. Partial writes must
+      not be observable after recovery.
+      Eclipse: comp_req__kvs__atomic_store.
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs, durability]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-STORE
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: COMP-REQ-KVS-INLINE-STORAGE
+    type: comp-req
+    title: Inline storage, no runtime allocation
+    status: approved
+    description: >
+      KVS shall use pre-allocated inline buffers sized at component
+      initialization; no heap allocation on the hot path.
+      Eclipse: comp_req__kvs__no_runtime_alloc.
+    fields:
+      req-type: non-functional
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs, memory]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC
+      - type: belongs-to
+        target: COMP-KVS

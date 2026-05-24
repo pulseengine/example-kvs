@@ -1,0 +1,230 @@
+# KVS architecture — feature → component → interface + operations,
+# detailed design, software units. Mirrors eclipse-score's
+# feat / comp / dd_sta / sw_unit / logic_arc_int / logic_arc_int_op
+# graph but encoded as rivet typed artifacts.
+
+artifacts:
+
+  # ── Feature (top of the architecture decomposition) ────────────────
+
+  - id: FEAT-PERSISTENCY
+    type: feat
+    title: Persistency
+    status: approved
+    description: >
+      User-visible persistency feature exposed through a managed API.
+      Eclipse: feat__persistency.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-STORE
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-LOAD
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-INTEGRITY-CHECK
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC
+
+  # ── Component that realises the feature ────────────────────────────
+
+  - id: COMP-KVS
+    type: comp
+    title: persistency::kvs
+    status: approved
+    description: >
+      Key-value store implementation of the persistency feature.
+      Eclipse: comp__persistency_kvs.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+      component-type: library
+    tags: [persistency, kvs]
+    links:
+      - type: realizes
+        target: FEAT-PERSISTENCY
+      - type: provides
+        target: LOGIC-ARC-INT-KVS
+
+  # ── Logical interface ─────────────────────────────────────────────
+  # Same as the FixVec example: the interface itself + its operations,
+  # both modeled as logic-arc-int with belongs-to links. The AADL +
+  # WIT files under arch/ are the binary-contract layer on top.
+
+  - id: LOGIC-ARC-INT-KVS
+    type: logic-arc-int
+    title: KVS Interface
+    status: approved
+    description: >
+      Logical interface of the key-value store: store / load / delete /
+      snapshot operations over (key, value) pairs.
+      Eclipse: logic_arc_int__persistency__kvs.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs]
+
+  - id: LOGIC-ARC-INT-OP-KVS-STORE
+    type: logic-arc-int
+    title: Store
+    status: approved
+    description: Persist a (key, value) pair durably.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs]
+    links:
+      - type: belongs-to
+        target: LOGIC-ARC-INT-KVS
+
+  - id: LOGIC-ARC-INT-OP-KVS-LOAD
+    type: logic-arc-int
+    title: Load
+    status: approved
+    description: Retrieve a previously-stored value by key, with integrity check.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs]
+    links:
+      - type: belongs-to
+        target: LOGIC-ARC-INT-KVS
+
+  - id: LOGIC-ARC-INT-OP-KVS-DELETE
+    type: logic-arc-int
+    title: Delete
+    status: approved
+    description: Remove a key-value pair durably.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs]
+    links:
+      - type: belongs-to
+        target: LOGIC-ARC-INT-KVS
+
+  - id: LOGIC-ARC-INT-OP-KVS-SNAPSHOT-CREATE
+    type: logic-arc-int
+    title: Create Snapshot
+    status: approved
+    description: Atomically capture the current state of the KVS.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs, snapshot]
+    links:
+      - type: belongs-to
+        target: LOGIC-ARC-INT-KVS
+
+  - id: LOGIC-ARC-INT-OP-KVS-SNAPSHOT-RESTORE
+    type: logic-arc-int
+    title: Restore Snapshot
+    status: approved
+    description: Atomically restore the KVS state from a prior snapshot.
+    fields:
+      safety-level: ASIL_B
+      security: "NO"
+    tags: [persistency, kvs, snapshot]
+    links:
+      - type: belongs-to
+        target: LOGIC-ARC-INT-KVS
+
+  # ── Detailed design ────────────────────────────────────────────────
+
+  - id: DD-STA-KVS-KEY-VALIDATOR
+    type: dd-sta
+    title: Key validator
+    status: approved
+    description: >
+      Static design of the syntactic key validator. Validates the
+      alphabet, length boundaries, and leading-dot rejection.
+    fields:
+      safety-level: ASIL_B
+      view-type: class-diagram
+    tags: [persistency, kvs, design]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: DD-STA-KVS-BACKEND-STRATEGY
+    type: dd-sta
+    title: Storage backend strategy
+    status: approved
+    description: >
+      Strategy pattern: `KvsBackend` trait with two implementations
+      (RocksDb for production, InMemory for tests).
+    fields:
+      safety-level: ASIL_B
+      view-type: class-diagram
+    tags: [persistency, kvs, design]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: DD-DYN-KVS-ATOMIC-STORE
+    type: dd-dyn
+    title: Atomic store sequence
+    status: approved
+    description: >
+      Sequence design for the atomic store path: WAL append → fsync
+      → live-table update → log rotation. Power-loss between any
+      two steps must leave the previous value intact.
+    fields:
+      safety-level: ASIL_B
+      view-type: sequence-diagram
+    tags: [persistency, kvs, design, durability]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+
+  # ── Software units ─────────────────────────────────────────────────
+
+  - id: SW-UNIT-KVS-VALIDATOR
+    type: sw-unit
+    title: KVS key validator implementation
+    status: approved
+    description: Rust source implementing the syntactic key validator.
+    fields:
+      safety-level: ASIL_B
+      source-file: "src/key_validator.rs"
+      language: rust
+    tags: [persistency, kvs, impl]
+    links:
+      - type: implements
+        target: DD-STA-KVS-KEY-VALIDATOR
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: SW-UNIT-KVS-BACKEND
+    type: sw-unit
+    title: KVS RocksDB backend implementation
+    status: approved
+    description: Rust source implementing the RocksDB-backed `KvsBackend`.
+    fields:
+      safety-level: ASIL_B
+      source-file: "src/backend_rocksdb.rs"
+      language: rust
+    tags: [persistency, kvs, impl]
+    links:
+      - type: implements
+        target: DD-STA-KVS-BACKEND-STRATEGY
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: SW-UNIT-KVS-ATOMIC-STORE
+    type: sw-unit
+    title: KVS atomic-store implementation
+    status: approved
+    description: Rust source implementing the WAL-based atomic store.
+    fields:
+      safety-level: ASIL_B
+      source-file: "src/atomic_store.rs"
+      language: rust
+    tags: [persistency, kvs, impl, durability]
+    links:
+      - type: implements
+        target: DD-DYN-KVS-ATOMIC-STORE
+      - type: belongs-to
+        target: COMP-KVS

@@ -1,0 +1,106 @@
+-- spar AADL package modelling the persistency::kvs interface.
+--
+-- This is the *real* architecture layer in the pulseengine stack —
+-- consumed by spar (https://github.com/pulseengine/spar) which emits
+-- a typed WIT interface (arch/kvs.wit), then handed to
+-- rules_wasm_component (https://github.com/pulseengine/rules_wasm_component)
+-- which generates a Rust trait via wit-bindgen and a WASM component
+-- whose link step rejects implementation drift.
+--
+-- Eclipse-score's logic_arc_int__persistency__kvs has no equivalent
+-- file — the typed need graph IS the interface specification, with
+-- no binary-contract artifact downstream. The chain stops at the
+-- rendered PlantUML.
+
+package KvsInterface
+public
+  with ARP4761;
+  with Data_Model;
+
+  -- ── The interface as a typed feature group ───────────────────────
+  feature group KvsOps
+
+    features
+      store            : provides subprogram access StoreFn;
+      load             : provides subprogram access LoadFn;
+      delete           : provides subprogram access DeleteFn;
+      snapshot_create  : provides subprogram access SnapshotCreateFn;
+      snapshot_restore : provides subprogram access SnapshotRestoreFn;
+
+    properties
+      ARP4761::Development_Assurance_Level => ASIL_B;
+      ARP4761::Security_Level => NO;
+  end KvsOps;
+
+  -- ── Subprogram signatures — the source of the WIT contract ──────
+
+  subprogram StoreFn
+    -- Atomic store; returns OK or VecErr.
+    features
+      key      : in parameter Base_Types::String;       -- 1..255 bytes, [A-Za-z0-9_./-]
+      value    : in parameter Base_Types::Buffer;
+      result   : out parameter Base_Types::Boolean;
+      err      : out parameter KvsError;
+  end StoreFn;
+
+  subprogram LoadFn
+    -- Returns value with integrity check, or IntegrityError on
+    -- checksum mismatch / NotFound on missing key.
+    features
+      key       : in parameter Base_Types::String;
+      value     : out parameter Base_Types::Buffer;
+      has_value : out parameter Base_Types::Boolean;
+      err       : out parameter KvsError;
+  end LoadFn;
+
+  subprogram DeleteFn
+    features
+      key      : in parameter Base_Types::String;
+      result   : out parameter Base_Types::Boolean;
+      err      : out parameter KvsError;
+  end DeleteFn;
+
+  subprogram SnapshotCreateFn
+    -- Atomically capture current state; returns opaque snapshot id.
+    features
+      snapshot_id : out parameter Base_Types::Unsigned_64;
+      result      : out parameter Base_Types::Boolean;
+      err         : out parameter KvsError;
+  end SnapshotCreateFn;
+
+  subprogram SnapshotRestoreFn
+    features
+      snapshot_id : in parameter Base_Types::Unsigned_64;
+      result      : out parameter Base_Types::Boolean;
+      err         : out parameter KvsError;
+  end SnapshotRestoreFn;
+
+  -- ── Error enumeration ────────────────────────────────────────────
+  data KvsError
+    properties
+      Data_Model::Data_Representation => Enum;
+      Data_Model::Enumerators => (
+        "InvalidKey", "NotFound", "IntegrityError",
+        "InsufficientCapacity", "SnapshotNotFound", "IoError"
+      );
+      ARP4761::Development_Assurance_Level => ASIL_B;
+  end KvsError;
+
+  -- ── The component that ships the interface ───────────────────────
+  system KvsComponent
+    features
+      ops : provides feature group KvsOps;
+    properties
+      ARP4761::Development_Assurance_Level => ASIL_B;
+      -- Inline-storage variant only; heap variant rejected per
+      -- decision-record DR-KVS-INLINE-STORAGE-FIRST.
+      ARP4761::Implementation_Strategy => "inline_storage";
+  end KvsComponent;
+
+  system implementation KvsComponent.rocksdb_inline
+    -- The backend selected by DR-KVS-BACKEND-CHOICE.
+    properties
+      ARP4761::Implementation_Strategy => "rocksdb_inline";
+  end KvsComponent.rocksdb_inline;
+
+end KvsInterface;

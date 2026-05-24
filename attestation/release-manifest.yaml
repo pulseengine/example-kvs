@@ -1,0 +1,89 @@
+# Sigil-shaped signed release manifest for persistency::kvs.
+#
+# Demonstrates what a sigil-signed attestation chain looks like for
+# this component. In a real release, `sigil` (https://github.com/pulseengine/sigil)
+# would:
+#   1. Hash the rivet artifact set (artifacts/*.yaml + the resolved
+#      WIT from arch/kvs.wit + the compiled WASM component)
+#   2. Hash the verification evidence (.witness/*.truth-table.json
+#      + the artifact-driven verification gate output)
+#   3. Wrap the (artifact-hash, evidence-hash, build-config-hash)
+#      triple in a signed in-toto-style attestation
+#   4. Append it to a content-addressed attestation chain
+#   5. Emit detached verification metadata that an auditor (or
+#      another sigil instance) can independently re-check
+#
+# Eclipse-score's equivalent is a green CI badge — the
+# `bazel run //:docs_check` succeeded. No signed attestation, no
+# hash-pinned evidence, no detached verification.
+
+manifest-version: "1"
+release:
+  component: persistency::kvs
+  version: 0.1.0
+  source-commit: "<populated by sigil at release time>"
+  build-config:
+    rivet-version: "v0.13.0"
+    spar-version: "v0.10.0"
+    rules-wasm-component-version: "v0.6.0"
+    target-triple: "wasm32-wasi-component"
+    profile: release
+
+inputs:
+  - kind: rivet-artifact-set
+    path: artifacts/
+    sha256: "<populated by sigil>"
+    artifacts:
+      - id: COMP-KVS
+        sha256: "<per-artifact hash>"
+      - id: LOGIC-ARC-INT-KVS
+        sha256: "<per-artifact hash>"
+      - id: COMP-REQ-KVS-KEY-NAMING
+        sha256: "<per-artifact hash>"
+      # ... (one entry per artifact)
+  - kind: wit-contract
+    path: arch/kvs.wit
+    sha256: "<populated by sigil>"
+  - kind: aadl-model
+    path: arch/kvs.aadl
+    sha256: "<populated by sigil>"
+
+verification-evidence:
+  - kind: witness-truth-tables
+    path: .witness/
+    sha256: "<populated by sigil>"
+    summary:
+      tests-run: "<n>"
+      mcdc-vectors-fired: "<n>"
+      mcdc-vectors-missing: "<m>"
+  - kind: artifact-driven-verification-gate
+    path: .verify-output.json
+    sha256: "<populated by sigil>"
+    summary:
+      artifacts-graded: "<n>"
+      passed: "<n>"
+      failed: 0
+      missing: 0
+  - kind: wasm-component-link
+    note: >
+      The WASM-component build succeeded against arch/kvs.wit. The
+      implementation traits are link-time-checked; drift is
+      compile-time-impossible.
+
+outputs:
+  - kind: wasm-component
+    path: dist/kvs.wasm
+    sha256: "<populated by sigil>"
+
+attestation:
+  scheme: sigstore-bundle-v0
+  signed-by: "<key id>"
+  signed-at: "<ISO 8601 timestamp>"
+  chain-tip: "<parent attestation sha256 — links into the rolling
+              content-addressed chain>"
+  detached-verification:
+    note: >
+      An auditor can independently verify this attestation by
+      re-hashing the inputs and evidence and re-running sigil with
+      `sigil verify --manifest release-manifest.yaml --bundle
+      release-manifest.sig`. No trust in this repo's CI is required.

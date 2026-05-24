@@ -1,0 +1,174 @@
+# Safety analysis (FMEA) + decision records for persistency::kvs.
+# Mirrors eclipse-score's feat_saf_fmea / comp_saf_fmea / dec_rec
+# need types.
+
+artifacts:
+
+  # ── FMEA entries ───────────────────────────────────────────────────
+
+  - id: FMEA-KVS-SILENT-CORRUPTION
+    type: fmea-entry
+    title: Silent corruption of stored value
+    status: approved
+    description: >
+      Power loss mid-write leaves a stored value in a torn state,
+      not detected by integrity check.
+      Eclipse: comp_saf_fmea__kvs__silent_corruption.
+    fields:
+      safety-level: ASIL_B
+      failure-mode: Stored value partially written after power loss
+      effect: >
+        Subsequent load returns a syntactically valid but stale or
+        torn payload to the consumer
+      cause: Buffered write interrupted before fsync completes
+      severity: "8"
+      occurrence: "3"
+      detection: "5"
+      rpn: "120"
+    tags: [persistency, kvs, safety]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+      - type: violates
+        target: COMP-REQ-KVS-ATOMIC-STORE
+      - type: is-mitigated-by
+        target: DD-DYN-KVS-ATOMIC-STORE
+
+  - id: FMEA-KVS-CHECKSUM-BYPASS
+    type: fmea-entry
+    title: Checksum verification bypassed on hot path
+    status: approved
+    description: >
+      An optimisation path skips checksum verification under
+      certain conditions, allowing corrupted data through.
+    fields:
+      safety-level: ASIL_B
+      failure-mode: Checksum check not executed on load
+      effect: Corrupted value returned without IntegrityError
+      cause: >
+        Hot-path optimisation skips the verify step when the value
+        is freshly cached
+      severity: "9"
+      occurrence: "2"
+      detection: "4"
+      rpn: "72"
+    tags: [persistency, kvs, safety, integrity]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+      - type: violates
+        target: COMP-REQ-KVS-VALUE-CHECKSUM
+      - type: is-mitigated-by
+        target: DD-STA-KVS-BACKEND-STRATEGY
+
+  # ── Decision records ───────────────────────────────────────────────
+
+  - id: DR-KVS-BACKEND-CHOICE
+    type: decision-record
+    title: Choose RocksDB over LevelDB for the KVS backend
+    status: approved
+    description: Selection of the durable storage backend.
+    fields:
+      rationale: >
+        RocksDB ships ASIL-relevant write-ahead-logging defaults and
+        has an active maintenance line; LevelDB upstream activity has
+        stalled.
+      alternatives: >
+        LevelDB (rejected: stalled upstream), bespoke append-only log
+        (rejected: re-implements WAL crash-safety).
+      consequences: >
+        Increases binary size by ~1.8 MB; adds a C++ dependency we
+        must track in the SBOM.
+    tags: [persistency, kvs, decision]
+    links:
+      - type: satisfies
+        target: COMP-REQ-KVS-ATOMIC-STORE
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: DR-KVS-INLINE-STORAGE-FIRST
+    type: decision-record
+    title: Inline storage path is the only ASIL-B path
+    status: approved
+    description: Storage strategy for ASIL-B builds.
+    fields:
+      rationale: >
+        Heap-storage variant uses dynamic allocation on the hot path,
+        which violates FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC. Inline
+        storage path is the only one certified.
+      alternatives: >
+        Allow heap variant in ASIL-B (rejected: violates no-alloc),
+        ship both with cfg flag (rejected: doubles MC/DC scope).
+      consequences: >
+        Capacity is fixed at component init; reconfigurations require
+        re-flashing. Acceptable for the target ECU.
+    tags: [persistency, kvs, decision, memory]
+    links:
+      - type: satisfies
+        target: COMP-REQ-KVS-INLINE-STORAGE
+      - type: belongs-to
+        target: COMP-KVS
+
+  # ── Test specifications ────────────────────────────────────────────
+  # The artifact-driven verification gate (tools/verify.py) looks for
+  # tests matching `test_<lowercase-id-with-dashes-as-underscores>_*`
+  # for every comp-req with status: approved. Each test-spec below
+  # names the test convention explicitly so the artifact ↔ test
+  # binding is auditable.
+
+  - id: TEST-SPEC-KVS-KEY-VALIDATOR
+    type: test-spec
+    title: Key validator unit tests
+    status: approved
+    description: >
+      Unit-level coverage of the syntactic key validator. Boundary
+      cases: empty string, single-char, 254/255/256 length,
+      alphabet membership, leading-dot rejection.
+    fields:
+      safety-level: ASIL_B
+      test-method: automated-test
+      expected-result: All boundary cases pass; invalid keys are rejected.
+      mutation-score-target: 0.85
+    tags: [persistency, kvs, test]
+    links:
+      - type: fully-verifies
+        target: COMP-REQ-KVS-KEY-NAMING
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: TEST-SPEC-KVS-CHECKSUM-FAULT-INJECT
+    type: test-spec
+    title: Checksum verification fault-injection tests
+    status: approved
+    description: >
+      Fault-injection tests that flip bytes in the backing store
+      between store and load. Each load must return IntegrityError.
+    fields:
+      safety-level: ASIL_B
+      test-method: automated-test
+      expected-result: Load returns IntegrityError for every injected fault.
+    tags: [persistency, kvs, test, integrity]
+    links:
+      - type: fully-verifies
+        target: COMP-REQ-KVS-VALUE-CHECKSUM
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: TEST-SPEC-KVS-ATOMIC-STORE-POWERLOSS
+    type: test-spec
+    title: Atomic-store power-loss simulation
+    status: approved
+    description: >
+      Simulated power-loss between WAL append and table update;
+      after recovery, only the previous-value or the new-value
+      should be observable, never a torn intermediate.
+    fields:
+      safety-level: ASIL_B
+      test-method: simulation
+      expected-result: 100 % of injected power-loss points recover to a consistent state.
+    tags: [persistency, kvs, test, durability]
+    links:
+      - type: fully-verifies
+        target: COMP-REQ-KVS-ATOMIC-STORE
+      - type: belongs-to
+        target: COMP-KVS

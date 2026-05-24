@@ -1,0 +1,54 @@
+// WIT (WebAssembly Interface Type) contract for persistency::kvs.
+//
+// Consumed by rules_wasm_component's wit_library + wit_bindgen rules
+// to generate a Rust trait + a WASM-component link step that rejects
+// any implementation whose method signatures don't match.
+//
+// In the eclipse-score stack, no equivalent file exists — the
+// interface need (logic_arc_int__persistency__kvs) stops at being
+// a documented specification with no compile-time enforcement of
+// the binary contract.
+
+package pulseengine:kvs@0.1.0;
+
+interface kvs {
+    /// Errors that the KVS operations can return.
+    variant kvs-error {
+        invalid-key,             // key doesn't match key-naming spec
+        not-found,               // key not present in store
+        integrity-error,         // checksum verification failed on load
+        insufficient-capacity,   // inline-storage capacity exhausted
+        snapshot-not-found,      // snapshot id unknown / superseded
+        io-error,                // underlying storage I/O fault
+    }
+
+    /// Opaque snapshot identifier returned by snapshot-create.
+    type snapshot-id = u64;
+
+    /// Persist a (key, value) pair atomically and durably.
+    /// COMP-REQ-KVS-KEY-NAMING + COMP-REQ-KVS-ATOMIC-STORE +
+    /// COMP-REQ-KVS-VALUE-CHECKSUM apply.
+    store: func(key: string, value: list<u8>) -> result<_, kvs-error>;
+
+    /// Retrieve a previously-stored value by key. Performs integrity
+    /// check on load (COMP-REQ-KVS-VALUE-CHECKSUM). Returns
+    /// not-found if key absent, integrity-error on checksum mismatch.
+    load: func(key: string) -> result<list<u8>, kvs-error>;
+
+    /// Remove a key-value pair durably.
+    delete: func(key: string) -> result<_, kvs-error>;
+
+    /// Atomically capture the current state of the KVS.
+    /// Returns an opaque snapshot id that snapshot-restore can use.
+    snapshot-create: func() -> result<snapshot-id, kvs-error>;
+
+    /// Atomically restore the KVS to a previous snapshot.
+    snapshot-restore: func(id: snapshot-id) -> result<_, kvs-error>;
+}
+
+/// The world the KVS component exports. rules_wasm_component's
+/// rust_component (or cpp_component) rule consumes this to generate
+/// the trait the implementation must satisfy.
+world kvs-component {
+    export kvs;
+}

@@ -1,0 +1,41 @@
+# example-kvs CI — runs the two gates that work without spar/sigil
+# installed: rivet validate (typed-artifact graph check) and the
+# artifact-driven verification gate (tools/verify.py).
+#
+# No untrusted input is used in any run: block; all commands are
+# static make targets / pinned installs.
+
+name: validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pinned:
+    name: rivet validate + artifact-driven verification gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rivet
+        run: |
+          cargo install --git https://github.com/pulseengine/rivet \
+              --tag v0.13.0 \
+              rivet-cli --bin rivet --locked
+          rivet --version
+
+      - name: Install PyYAML for verify.py
+        run: pip install pyyaml
+
+      - name: rivet validate (typed-artifact graph check)
+        run: make validate
+
+      - name: artifact-driven verification gate
+        run: make verify

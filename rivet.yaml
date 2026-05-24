@@ -1,0 +1,19 @@
+# Worked example — eclipse-score persistency::kvs in pulseengine shape.
+#
+# Derived from eclipse-score's persistency repo
+# (https://github.com/eclipse-score/persistency); see README for the
+# eclipse → pulseengine mapping.
+#
+# Run:  make validate    rivet validate against the score schema
+#       make aadl        spar validates the AADL package (optional)
+#       make wit         spar emits WIT from AADL and diffs (optional)
+#       make verify      artifact-driven verification gate (Python)
+project:
+  name: example-kvs
+  version: "0.1.0"
+  schemas:
+    - common
+    - score
+sources:
+  - path: artifacts
+    format: generic-yaml
