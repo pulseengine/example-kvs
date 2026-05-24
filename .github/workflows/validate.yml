@@ -1,9 +1,15 @@
-# example-kvs CI — runs the two gates that work without spar/sigil
-# installed: rivet validate (typed-artifact graph check) and the
-# artifact-driven verification gate (tools/verify.py).
+# example-kvs CI — single job that runs the three gates:
+#   1. `rivet validate`   typed-artifact graph check
+#   2. `bazel build //...` AADL → WIT → wit-bindgen → WASM component
+#   3. `python tools/verify.py` artifact-driven verification gate
+#      (drives bazel test per comp-req's verified-by entries)
 #
-# No untrusted input is used in any run: block; all commands are
-# static make targets / pinned installs.
+# Note: CI may go RED on purpose. The verify gate runs surface tests
+# against the vendored eclipse-score rust_kvs sources. Some of those
+# tests assert spec compliance the upstream impl does not enforce;
+# when that's the case, the test FAILs and the gate FIREs. That is
+# the LS-N demonstration vs. "green-CI-by-default" coverage-wedge
+# reporting. See README.md "What this gate measures" for details.
 
 name: validate
 
@@ -18,8 +24,8 @@ permissions:
   contents: read
 
 jobs:
-  validate-pinned:
-    name: rivet validate + artifact-driven verification gate
+  validate:
+    name: rivet + bazel + verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,25 +40,19 @@ jobs:
       - name: Install PyYAML for verify.py
         run: pip install pyyaml
 
-      - name: rivet validate (typed-artifact graph check)
-        run: make validate
-
-      - name: artifact-driven verification gate
-        run: make verify
-
-  bazel-wasm-component:
-    name: bazel build (AADL → WIT → wasm component)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
       - name: Set up bazelisk
         uses: bazel-contrib/setup-bazel@0.9.1
         with:
           bazelisk-version: "1.x"
 
-      - name: bazel build //... (WIT → wit-bindgen → rust_component → .wasm)
+      - name: rivet validate (typed-artifact graph check)
+        run: make validate
+
+      - name: bazel build (AADL → WIT → wit-bindgen → wasm component)
         run: bazel build //...
 
-      - name: bazel test //... (rust_wasm_component_test)
-        run: bazel test //... --test_output=errors
+      - name: artifact-driven verification gate (real bazel test per artifact)
+        # verify.py shells out to `bazel test --test_arg=--exact …` per
+        # entry in each comp-req's verified-by list. Honest signal: red
+        # iff any comp-req has FAILED or MISSING evidence.
+        run: make verify

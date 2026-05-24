@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Eclipse-score rust_kvs sources, vendored under Apache-2.0.
+# See ATTRIBUTION.md for source + license details.
+#
+# This builds the NATIVE (host) library — the verify gate runs the
+# upstream test suite against this binary via :rust_kvs_test below.
+# The separate WASM-component build at //:kvs_component re-implements
+# the WIT interface in src/lib.rs (with a thin layer over Kvs); the
+# WASM build is independent of this rust_library target.
+rust_library(
+    name = "rust_kvs",
+    srcs = glob(["src/*.rs"]),
+    edition = "2021",
+    crate_name = "rust_kvs",
+    deps = [
+        "//vendor/score_log_shim/score_log:score_log",
+        "@crates//:adler32",
+        "@crates//:tinyjson",
+    ],
+    proc_macro_deps = [
+        "//vendor/score_log_shim/score_log_derive:score_log_derive",
+    ],
+)
+
+# Runs all #[cfg(test)] tests inside rust_kvs as a single host binary.
+# Invoke a specific test via:
+#   bazel test //vendor/rust_kvs:rust_kvs_test \
+#       --test_arg=--exact \
+#       --test_arg=<module::test_fn_name>
+# This is what tools/verify.py drives — one bazel invocation per
+# discovered artifact test, with --test_filter narrowing to the
+# named function.
+rust_test(
+    name = "rust_kvs_test",
+    crate = ":rust_kvs",
+    edition = "2021",
+    deps = [
+        "@crates//:tempfile",
+    ],
+)
+

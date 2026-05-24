@@ -1,0 +1,9 @@
+[package]
+name = "score_log"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "No-op stand-in for eclipse-score/baselibs_rust score_log; see ../README.md"
+
+[dependencies]
+score_log_derive = { path = "../score_log_derive" }
