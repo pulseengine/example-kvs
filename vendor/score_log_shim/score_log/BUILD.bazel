@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Companion rlib: macros + the ScoreDebug trait + a blanket impl.
+# Re-exports the proc-macro from //vendor/score_log_shim/score_log_derive.
+rust_library(
+    name = "score_log",
+    srcs = ["src/lib.rs"],
+    edition = "2021",
+    crate_name = "score_log",
+    proc_macro_deps = [
+        "//vendor/score_log_shim/score_log_derive:score_log_derive",
+    ],
+)

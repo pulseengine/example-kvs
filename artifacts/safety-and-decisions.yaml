@@ -65,20 +65,30 @@ artifacts:
 
   - id: DR-KVS-BACKEND-CHOICE
     type: decision-record
-    title: Choose RocksDB over LevelDB for the KVS backend
+    title: JSON file backend with snapshot rotation (no WAL backend)
     status: approved
-    description: Selection of the durable storage backend.
+    description: Selection of the durable storage backend that ships today.
     fields:
       rationale: >
-        RocksDB ships ASIL-relevant write-ahead-logging defaults and
-        has an active maintenance line; LevelDB upstream activity has
-        stalled.
+        Vendored eclipse-score rust_kvs uses a single backend
+        (json_backend.rs:401) that writes (key, value) as a tinyjson
+        document, computes an Adler32 checksum stored in a sibling
+        .hash file, and achieves atomic replace via fs::rename
+        snapshot rotation (json_backend.rs:216-254). Adler32 is the
+        upstream's checksum-of-record despite the comp_req text
+        saying "CRC32C" — that is itself a spec/impl gap.
       alternatives: >
-        LevelDB (rejected: stalled upstream), bespoke append-only log
-        (rejected: re-implements WAL crash-safety).
+        RocksDB or LevelDB or a bespoke write-ahead log were
+        considered upstream but not implemented. The KvsBackend
+        trait (kvs_backend.rs:45) exposes an extension point; only
+        JsonBackend implements it.
       consequences: >
-        Increases binary size by ~1.8 MB; adds a C++ dependency we
-        must track in the SBOM.
+        Atomicity guarantee is bounded by the POSIX fs::rename
+        atomicity (kvs_backend::test_flush_ok and the snapshot_*
+        tests cover the rotation path). Snapshot count caps at
+        json_backend's snapshot_max_count (default 3, runtime-
+        configurable via JsonBackendBuilder::snapshot_max_count).
+        No durability guarantee beyond what the filesystem provides.
     tags: [persistency, kvs, decision]
     links:
       - type: satisfies
@@ -86,22 +96,32 @@ artifacts:
       - type: belongs-to
         target: COMP-KVS
 
-  - id: DR-KVS-INLINE-STORAGE-FIRST
+  - id: DR-KVS-INLINE-STORAGE-GAP
     type: decision-record
-    title: Inline storage path is the only ASIL-B path
+    title: Inline-storage requirement is unmet by the current backend
     status: approved
-    description: Storage strategy for ASIL-B builds.
+    description: Tracking the gap between the spec and the impl.
     fields:
       rationale: >
-        Heap-storage variant uses dynamic allocation on the hot path,
-        which violates FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC. Inline
-        storage path is the only one certified.
+        COMP-REQ-KVS-INLINE-STORAGE says "no heap allocation on the
+        hot path." Vendored rust_kvs uses std::collections::HashMap
+        for the in-memory store (kvs.rs) and Arc<Mutex<KvsData>> per
+        method (kvs.rs:38-44, etc.) — both allocate. There is no
+        allocator-tripwire in the build, and the surface test for
+        this comp-req is documented as a gap, not real verification.
       alternatives: >
-        Allow heap variant in ASIL-B (rejected: violates no-alloc),
-        ship both with cfg flag (rejected: doubles MC/DC scope).
+        (a) wire witness::no_alloc_guard around set_value/get_value
+        and have it panic on any allocator call — requires the
+        witness toolchain be present; (b) replace HashMap with a
+        bounded inline structure (heapless::IndexMap or a custom
+        slab) — requires an upstream fork; (c) downgrade COMP-REQ-
+        KVS-INLINE-STORAGE to draft and document that ASIL-B inline
+        storage is out of scope for this baseline.
       consequences: >
-        Capacity is fixed at component init; reconfigurations require
-        re-flashing. Acceptable for the target ECU.
+        Until (a), (b), or (c) lands, the comp-req's verified-by:
+        list is intentionally empty and the verify gate buckets the
+        artifact as MISSING — not falsely PASSED. The gap is
+        recorded; the audit trail does not lie.
     tags: [persistency, kvs, decision, memory]
     links:
       - type: satisfies

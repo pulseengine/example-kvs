@@ -1,0 +1,55 @@
+"""Bazel build for the persistency::kvs WASM component.
+
+The chain:
+  1. wit_library declares the KVS interface contract (arch/kvs.wit)
+  2. rust_wasm_component_bindgen generates Rust bindings from the WIT,
+     compiles src/lib.rs against those bindings, and produces a WASM
+     component artifact.
+  3. rust_wasm_component_test smoke-tests that the produced .wasm is
+     a well-formed component.
+
+If src/lib.rs's `impl Guest for Component` doesn't match the WIT
+signatures, the Rust compile fails — the binary contract is
+enforced at build time, which is the central operational difference
+from eclipse-score's interface-as-documentation approach.
+"""
+
+load("@rules_wasm_component//rust:defs.bzl",
+     "rust_wasm_component_bindgen",
+     "rust_wasm_component_test")
+load("@rules_wasm_component//wit:defs.bzl", "wit_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# ── 1. Declare the WIT interface ──────────────────────────────────────
+# arch/kvs.wit declares `package pulseengine:kvs@0.1.0;` with the
+# `kvs` interface and `kvs-component` world. This target makes the
+# WIT available as a Bazel dependency.
+wit_library(
+    name = "kvs_interface",
+    package_name = "pulseengine:kvs",
+    srcs = ["arch/kvs.wit"],
+    world = "kvs-component",
+)
+
+# ── 2. Generate bindings + compile the Rust impl ──────────────────────
+# rust_wasm_component_bindgen runs wit-bindgen on :kvs_interface to
+# generate the Rust trait `Guest`, then compiles src/lib.rs (which
+# implements `Guest`) against those bindings, producing a WASM
+# component at bazel-bin/kvs_component.wasm.
+rust_wasm_component_bindgen(
+    name = "kvs_component",
+    srcs = ["src/lib.rs"],
+    profiles = ["release"],
+    validate_wit = False,
+    wit = ":kvs_interface",
+    deps = [
+        "//vendor/rust_kvs:rust_kvs",
+    ],
+)
+
+# ── 3. Smoke-test the produced component ──────────────────────────────
+rust_wasm_component_test(
+    name = "kvs_component_test",
+    component = ":kvs_component",
+)
