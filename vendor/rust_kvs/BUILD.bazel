@@ -42,3 +42,17 @@ rust_test(
     ],
 )
 
+# ── miri UB checking ──────────────────────────────────────────────────
+# Upstream eclipse-score's BUILD (src/rust/rust_kvs/BUILD:36-105) ships
+# nine miri_test targets — one per module — via a custom rules_rust
+# fork (`rules_rust 0.68.2-score`) that adds a `miri_test` rule not
+# present in the public BCR. Public rules_rust 0.70.0 has no
+# equivalent, so we replicate the intent via cargo-miri instead:
+#
+#   make miri              # runs `cargo +nightly miri test` for every
+#                          # module the upstream targets covered
+#   make miri MODULE=kvs   # narrows to one module (matches upstream
+#                          # `bazel test //...:tests_miri_kvs`)
+#
+# Same UB-checking surface, no rules_rust fork. See tools/miri.sh.
+

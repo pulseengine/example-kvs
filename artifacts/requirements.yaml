@@ -268,13 +268,14 @@ artifacts:
       safety-level: ASIL_B
       security: "NO"
       verification-criteria: >
-        Documented gap — the upstream implementation uses HashMap and
-        Arc on the hot path; no allocator guard is wired. A real check
-        requires witness allocator instrumentation. The current
-        surface test PASSES (no guard fires) but the gap is recorded
-        here so future witness wiring closes it.
-      verified-by:
-        - "//tests/surface:surface_tests:test_comp_req_kvs_inline_storage_no_runtime_alloc_documented_gap"
+        No verifying test exists. The upstream implementation uses
+        std::collections::HashMap and Arc<Mutex> on the hot path —
+        both allocate. A real check requires witness allocator
+        instrumentation (witness::no_alloc_guard) which is not wired
+        in this example. The verify gate intentionally reports this
+        comp-req as MISSING (not PASSED) to make the gap auditable.
+        See DR-KVS-INLINE-STORAGE-GAP for the response options.
+      verified-by: []
     tags: [persistency, kvs, memory]
     links:
       - type: satisfies

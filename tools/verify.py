@@ -64,8 +64,14 @@ def parse_verified_by(entry: str) -> tuple[str, str]:
 # ── artifact discovery ───────────────────────────────────────────────
 
 
-def expected_artifacts(artifact_dir: pathlib.Path) -> list[dict]:
-    """Approved comp-reqs with their (possibly empty) verified-by list."""
+def expected_artifacts(artifact_dir: pathlib.Path,
+                       skip_ids: set[str] | None = None) -> list[dict]:
+    """Approved comp-reqs with their (possibly empty) verified-by list.
+
+    If `skip_ids` is provided, artifacts whose id is in the set are
+    omitted (used to honor a variant's `out-of-scope-for:` list).
+    """
+    skip = skip_ids or set()
     out = []
     for path in sorted(artifact_dir.glob("*.yaml")):
         try:
@@ -77,9 +83,28 @@ def expected_artifacts(artifact_dir: pathlib.Path) -> list[dict]:
                 continue
             if art.get("status") != "approved":
                 continue
+            if art["id"] in skip:
+                continue
             verified = art.get("fields", {}).get("verified-by", []) or []
             out.append({"id": art["id"], "verified-by": list(verified)})
     return out
+
+
+def variant_scope(variants_dir: pathlib.Path, variant: str) -> set[str]:
+    """Return the set of comp-req IDs out-of-scope for `variant`.
+
+    Reads variants/bindings.yaml; returns an empty set if the file
+    is missing (no variant model declared) or the variant isn't
+    listed (caller's error, but be permissive).
+    """
+    bindings_file = variants_dir / "bindings.yaml"
+    if not bindings_file.is_file():
+        return set()
+    data = yaml.safe_load(bindings_file.read_text()) or {}
+    for entry in data.get("bindings", []):
+        if entry.get("variant") == variant:
+            return set(entry.get("out-of-scope-for", []) or [])
+    return set()
 
 
 # ── test execution ───────────────────────────────────────────────────
@@ -96,13 +121,27 @@ def bazel_cmd() -> list[str]:
     )
 
 
-def list_tests(target: str, _cache: dict[str, set[str]] = {}) -> set[str]:
+_LIST_CACHE: dict[str, set[str]] = {}
+
+
+def list_tests(target: str) -> set[str]:
     """Return the set of test names present in the binary for `target`."""
-    if target in _cache:
-        return _cache[target]
+    cached = _LIST_CACHE.get(target)
+    if cached is not None:
+        return cached
     bz = bazel_cmd()
-    # Build first so bazel-bin/<path> exists.
-    subprocess.run(bz + ["build", target], check=True, capture_output=True)
+    # Build first so bazel-bin/<path> exists. Capture output so a
+    # successful build stays quiet, but surface stderr if the build
+    # fails — silent build errors hide real configuration problems.
+    build = subprocess.run(
+        bz + ["build", target], capture_output=True, text=True,
+    )
+    if build.returncode != 0:
+        sys.stderr.write(
+            f"bazel build {target} failed (exit {build.returncode}):\n"
+            f"{build.stderr}\n"
+        )
+        build.check_returncode()
     # Resolve bazel-bin path.
     proc = subprocess.run(
         bz + ["cquery", target, "--output=files"],
@@ -121,7 +160,7 @@ def list_tests(target: str, _cache: dict[str, set[str]] = {}) -> set[str]:
         for line in listed.splitlines()
         if line.endswith(": test")
     }
-    _cache[target] = names
+    _LIST_CACHE[target] = names
     return names
 
 
@@ -147,13 +186,23 @@ def main(argv: list[str]) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--artifacts", type=pathlib.Path,
                     default=pathlib.Path("artifacts"))
+    ap.add_argument("--variants", type=pathlib.Path,
+                    default=pathlib.Path("variants"),
+                    help="Directory containing feature-model.yaml + bindings.yaml")
+    ap.add_argument("--variant", type=str, default="dev",
+                    help="Deployment-context variant; selects out-of-scope-for: filter "
+                         "from variants/bindings.yaml. Defaults to 'dev'.")
     ap.add_argument("--report", type=pathlib.Path,
                     default=pathlib.Path(".verify-output.json"))
     ap.add_argument("--no-run", action="store_true",
                     help="Discover only; check verified-by presence, do not invoke bazel")
     args = ap.parse_args(argv)
 
-    artifacts = expected_artifacts(args.artifacts)
+    skip = variant_scope(args.variants, args.variant)
+    if skip:
+        print(f"# variant={args.variant} — skipping {len(skip)} out-of-scope comp-req(s): "
+              f"{', '.join(sorted(skip))}")
+    artifacts = expected_artifacts(args.artifacts, skip_ids=skip)
     passed: list[tuple[str, list[str]]] = []
     failed: list[tuple[str, list[str]]] = []
     missing: list[tuple[str, str]] = []

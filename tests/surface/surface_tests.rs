@@ -231,30 +231,13 @@ fn test_comp_req_kvs_atomic_store_snapshot_restore_recovers_previous_value() {
     }
 }
 
-// ────────────────────────────────────────────────────────────────────
-// COMP-REQ-KVS-INLINE-STORAGE
+// COMP-REQ-KVS-INLINE-STORAGE — no surface test wired.
 //
-// "KVS shall use pre-allocated inline buffers sized at component
-//  initialization; no heap allocation on the hot path."
-//
-// Upstream impl uses std::collections::HashMap and std::sync::Arc;
-// the hot path DOES allocate. There is no test for this in upstream,
-// and there is no allocation guard in their build. These surface
-// tests document the gap; a real check requires witness instrumentation
-// (out of scope for this example skeleton).
-// ────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_comp_req_kvs_inline_storage_no_runtime_alloc_documented_gap() {
-    // Upstream relies on `HashMap` for the in-memory store. A genuine
-    // "no allocation post-init" test requires witness allocator
-    // instrumentation, which is not wired into this example. This test
-    // asserts the documented gap: a basic insertion does NOT panic
-    // under any allocator guard, because no guard is in place.
-    let (kvs, _d) = fresh_kvs(8);
-    kvs.set_value("k", KvsValue::F64(1.0)).unwrap();
-    // No allocator-tripwire fires here; that is itself the documented
-    // gap. The verify gate will mark this comp-req PASSED because the
-    // test runs green, but the gate's job is to surface that THIS test
-    // is insufficient — the artifact YAML carries that note.
-}
+// The upstream impl uses std::collections::HashMap and Arc<Mutex> on
+// the hot path. A genuine "no runtime allocation" check requires
+// witness allocator instrumentation, which is not part of this
+// example. Rather than ship a green-by-construction test that admits
+// it proves nothing, the comp-req's verified-by: list in
+// artifacts/requirements.yaml is empty, and the verify gate reports
+// the artifact as MISSING. See DR-KVS-INLINE-STORAGE-GAP for the
+// recorded response options.

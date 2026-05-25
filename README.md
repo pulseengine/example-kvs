@@ -32,25 +32,33 @@ This repo:
    `verified-by:` evidence list — there is no stubbing. Each artifact's
    bucket reflects what the real bazel test invocation reported.
 
-## Finding: two upstream comp-reqs are unverified and unenforced
+## Finding: two upstream comp-reqs are unverified and unenforced (both Rust and C++)
 
 Running the gate against the vendored eclipse-score `rust_kvs` surfaces
 a clean-room-verified gap. Two component requirements documented in
 [`persistency/score/kvs/docs/requirements/index.rst`](https://github.com/eclipse-score/persistency/blob/main/score/kvs/docs/requirements/index.rst)
-are accepted (`:status: valid`) but their declared behavior is not
-implemented and not tested:
+are accepted (`:status: valid`) but their declared behavior is neither
+implemented nor tested in *either* language binding:
 
-| Upstream comp-req | RST text (verbatim) | What the impl does |
+| Upstream comp-req | RST text (verbatim) | What both impls do |
 |---|---|---|
-| `comp_req__kvs__key_naming` | "shall accept keys that consist solely of alphanumeric characters, underscores, or dashes" | `Kvs::set_value("with space", _)` returns `Ok(())`. Same for keys containing `.`, `/`, or any other character. |
-| `comp_req__kvs__key_length` | "shall limit the maximum length of a key to 32 bytes" | `Kvs::set_value(&"a".repeat(33), _)` returns `Ok(())`. No length check exists. |
+| `comp_req__kvs__key_naming` | "shall accept keys that consist solely of alphanumeric characters, underscores, or dashes" | `Kvs::set_value("with space", _)` returns `Ok(())` in Rust (`kvs.rs:238`) and the C++ `set_value` (`src/cpp/src/kvs.cpp:24` carries an open `// TODO String Handling in set_value TBD`). Same for `.`, `/`, or any other character. |
+| `comp_req__kvs__key_length` | "shall limit the maximum length of a key to 32 bytes" | `Kvs::set_value(&"a".repeat(33), _)` returns `Ok(())`. No length constant exists in either codebase. |
 
 Verified independently (clean-room search across both Rust and C++
-codebases under eclipse-score): there is no `validate_key` / `check_key`
-function anywhere, no length constant, no test case directive
-(`.. test_case::`) tied to either comp-req, no documentation note saying
-"validation happens at the IPC boundary." Both Rust `set_value` and the
-C++ `set_value` accept any input.
+codebases under eclipse-score): no `validate_key` / `check_key` /
+length-constant symbol exists, no `.. test_case::` directive in
+`score/kvs/docs/` references either comp-req ID, no documentation
+note saying "validation happens at the IPC boundary."
+
+**Context on `:status: valid`.** In the sphinx-needs workflow
+eclipse-score uses, `:status: valid` means "approved for design" —
+not "must be implemented by release X." SCORE is pre-1.0 and this
+state is normal for early-stage projects. The finding's value is not
+"eclipse-score is broken" but "an artifact-driven gate makes the
+spec/impl delta a CI signal, where a coverage dashboard hides it as
+a wedge." The eclipse-score project itself is healthy and well-run;
+the methodology is the lesson.
 
 **The gate calls this out by going RED.** Current `make verify` output:
 
@@ -60,16 +68,23 @@ BUCKET    ID                            EVIDENCE
 PASSED    COMP-REQ-KVS-KEY-ENCODING     1 test(s) all green
 PASSED    COMP-REQ-KVS-VALUE-CHECKSUM   5 test(s) all green
 PASSED    COMP-REQ-KVS-ATOMIC-STORE     5 test(s) all green
-PASSED    COMP-REQ-KVS-INLINE-STORAGE   1 test(s) all green
 FAILED    COMP-REQ-KVS-KEY-NAMING       3 test(s) failed:
                                           - test_..._space_rejected
                                           - test_..._dot_rejected
                                           - test_..._slash_rejected
 FAILED    COMP-REQ-KVS-KEY-LENGTH       1 test(s) failed:
                                           - test_..._32_byte_cap_enforced
+MISSING   COMP-REQ-KVS-INLINE-STORAGE   verified-by is absent or empty
 ─────────────────────────────────────────────────────────────────────
-4 PASSED, 2 FAILED, 0 MISSING
+3 PASSED, 2 FAILED, 1 MISSING
 ```
+
+INLINE-STORAGE is MISSING (not PASSED) on purpose: the spec asks for
+"no runtime heap allocation," upstream uses HashMap + Arc<Mutex> which
+do allocate, and a genuine verifying test requires witness
+allocator-guard instrumentation that this example does not wire.
+DR-KVS-INLINE-STORAGE-GAP records the three response options
+(witness wiring / heapless replacement / spec downgrade).
 
 The surface tests at [`tests/surface/surface_tests.rs`](tests/surface/surface_tests.rs)
 assert exactly what the upstream RST says — no pulseengine-side
@@ -173,15 +188,41 @@ example-kvs/
 └── README                           # you are here
 ```
 
+## Variants (dev vs prod)
+
+Two named deployment contexts are declared in [`variants/`](variants/);
+each binds together three axes — KvsBuilder runtime dials, the bazel
+`--config=` profile (`/.bazelrc`), and which comp-reqs the verify
+gate enforces:
+
+| Variant | KvsBuilder dials | bazel profile | Audit scope |
+|---|---|---|---|
+| `dev` (default) | `Defaults::Ignored`, `Load::Ignored`, snapshot=1 | `--config=dev` (fastbuild) | excludes COMP-REQ-KVS-INLINE-STORAGE |
+| `prod` | `Defaults::Required`, `Load::Required`, snapshot=10 | `--config=prod` (compilation_mode=opt + `lto=fat` + `codegen-units=1` + `panic=abort` + `overflow-checks=on` + `strip=symbols`) | full comp-req set |
+
+Select via `VARIANT=…` on any make target:
+
+```sh
+make verify VARIANT=dev      # default
+make verify VARIANT=prod     # full enforcement
+make bazel  VARIANT=prod     # release-mode + LTO + safety rustc flags
+```
+
+Upstream eclipse-score `rust_kvs` has **no cargo features** in the
+core library, so the variant model rides on builder-time dials +
+bazel rustc-flag profiles, not `--features`. See
+[`variants/README.md`](variants/README.md) for the design rationale.
+
 ## Run it
 
 ```sh
-make validate    # rivet validate against the typed schema
-make verify      # artifact-driven verification gate (needs bazel installed)
-make bazel       # bazel build + bazel test //... (the WASM chain)
-make aadl        # spar validates the AADL package (requires spar)
-make wit         # spar AADL → WIT round-trip check (requires spar)
-make attest      # sigil-signed release manifest (requires sigil)
+make validate                       # rivet validate against the typed schema
+make verify [VARIANT=dev|prod]      # artifact-driven verification gate
+make bazel  [VARIANT=dev|prod]      # bazel build + bazel test //...
+make miri   [MODULE=<module>]       # cargo-miri UB check (matches upstream's miri_test intent)
+make aadl                           # spar validates the AADL package (requires spar)
+make wit                            # spar AADL → WIT round-trip check (requires spar)
+make attest                         # sigil-signed release manifest (requires sigil)
 ```
 
 Test the vendored upstream crate directly with cargo:
@@ -205,6 +246,16 @@ bazel test //tests/surface:surface_tests
   workstream — see the
   [playground-eclipse-score](https://github.com/pulseengine/playground-eclipse-score)
   workspace for that.
+- **Not a full mirror of eclipse-score's persistency comp-req set.**
+  Upstream `score/kvs/docs/requirements/index.rst` declares 35
+  comp-reqs; this example carries 6 of them. The selection is a
+  representative slice covering one functional-positive
+  (KEY-ENCODING), one functional-positive-impl-matches-spec
+  (VALUE-CHECKSUM), one durability (ATOMIC-STORE), one
+  non-functional with a real gap (INLINE-STORAGE), and the two that
+  surfaced the finding (KEY-NAMING, KEY-LENGTH). A safety case would
+  need to cover the other 29 explicitly; this example is a
+  methodology demonstrator, not a coverage substitute.
 - **Not endorsed by the Eclipse Foundation or eclipse-score
   maintainers.** This is a pulseengine demonstration that vendors
   upstream Apache-2.0 sources; issues belong here, eclipse-score's
