@@ -129,7 +129,7 @@ it implicit.
 | `vendor/rust_kvs/` (vendored upstream) | The actual eclipse-score KVS code, compiled as a bazel `rust_library` with all 248 upstream unit tests runnable via `bazel test //vendor/rust_kvs:rust_kvs_test` | Same code in eclipse-score/persistency, tested by its own CI |
 | `tests/surface/surface_tests.rs` | One `#[test]` per comp-req, asserting requirement-as-test against the vendored upstream code (verbatim spec text, no embellishment) | None — eclipse tests are organized by module, not requirement |
 | `arch/kvs.aadl` (spar AADL) | Typed feature group + subprogram signatures + ARP4761 safety properties | None |
-| `arch/kvs.wit` (binary contract) | WIT interface that wit-bindgen turns into a Rust trait the impl must satisfy at link time | None — interface stops at the rendered diagram |
+| `arch/kvs.wit` (binary contract) | WIT interface that wit-bindgen turns into a Rust trait. `src/lib.rs` implements that trait by **delegating to the vendored eclipse-score `rust_kvs`**; the .wasm component therefore links the *real* upstream code, not a toy stub. If the upstream API drifts or the WIT signature drifts, the Rust compile fails — binary-contract enforcement runs over real code. | None — interface stops at the rendered diagram |
 | `tools/verify.py` (artifact-driven gate) | Walks every approved comp-req, reads `verified-by:`, runs `bazel test` per entry, exits red on any gap | None — eclipse renders a coverage pie chart |
 | `attestation/release-manifest.yaml` (sigil) | Signed in-toto-style attestation tying artifact hashes + WIT hash + evidence hashes | Green CI badge |
 
@@ -141,7 +141,7 @@ it implicit.
 | `vendor/rust_kvs/` upstream sources + tests | ✅ **244 of 248 tests pass natively**; 4 ignored. `bazel test //vendor/rust_kvs:rust_kvs_test` runs all of them. |
 | `tests/surface/surface_tests.rs` comp-req gate | ✅ **Runs in bazel**; reports 6 PASSED + 4 FAILED. The 4 failures are confirmed-real spec falsifications (see "Finding" above). |
 | `tools/verify.py` artifact-driven gate | ✅ **Shells out to bazel test per artifact**; reports 4 PASSED + 2 FAILED comp-reqs. |
-| `bazel build //...` — AADL → WIT → wit-bindgen → Rust → .wasm component | ✅ **Builds + passes** locally; CI builds it on every push |
+| `bazel build //:kvs_component` — AADL → WIT → wit-bindgen → Rust → .wasm component, **links against the vendored eclipse-score `rust_kvs`** | ✅ Builds + passes locally; CI builds it on every push. **2.9 MB** fastbuild → **225 KB** under `--config=prod_ship` (compilation_mode=opt + lto=fat + codegen-units=1 + panic=abort + strip=symbols) — 13× size reduction from the safety profile alone. |
 | `vendor/score_log_shim/` no-op stand-in for `score_log` | ✅ **Compiles + lets vendored rust_kvs tests run** without pulling baselibs_rust |
 | `make aadl` / `make wit` via `spar` | ⚙️ Optional — requires `spar` installed; skips cleanly if missing |
 | `verification/mc_dc_harness.rs` witness annotations | 📄 **Skeleton** showing what witness-instrumented tests look like; not wired into a witness build yet |
@@ -160,7 +160,9 @@ example-kvs/
 ├── arch/
 │   ├── kvs.aadl                     # spar AADL package, ARP4761 properties
 │   └── kvs.wit                      # WIT contract emitted from the AADL
-├── src/lib.rs                       # WASM-component impl of arch/kvs.wit
+├── src/lib.rs                       # WASM-component impl of arch/kvs.wit;
+│                                    # wires the WIT trait to vendored
+│                                    # rust_kvs (KvsBuilder + InMemoryBackend)
 ├── vendor/
 │   ├── rust_kvs/                    # eclipse-score rust_kvs sources (Apache-2.0)
 │   │   ├── ATTRIBUTION.md           # source + license details
