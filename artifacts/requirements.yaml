@@ -127,16 +127,73 @@ artifacts:
     title: Key Naming
     status: approved
     description: >
-      Keys shall be UTF-8 strings of length 1..255 containing only
-      [A-Za-z0-9_./-] and shall not start with '.'.
-      Eclipse: comp_req__kvs__key_naming.
+      The component shall accept keys that consist solely of alphanumeric
+      characters, underscores, or dashes.
+      Eclipse: comp_req__kvs__key_naming (verbatim).
     fields:
       req-type: functional
       safety-level: ASIL_B
       security: "NO"
       verification-criteria: >
-        Unit tests cover the alphabet, length boundaries
-        (0, 1, 255, 256), and the leading-dot rejection.
+        Surface tests assert that keys matching [A-Za-z0-9_-] are
+        accepted and keys containing any other character (space, dot,
+        slash, punctuation, non-ASCII) are rejected at set_value time.
+      verified-by:
+        # Positive-path coverage lives in the KEY-ENCODING test
+        # (test_comp_req_kvs_key_encoding_valid_utf8_accepted), which
+        # also exercises plain alphabet keys. The three tests here are
+        # the negative paths from the upstream's verbatim spec.
+        - "//tests/surface:surface_tests:test_comp_req_kvs_key_naming_space_rejected"
+        - "//tests/surface:surface_tests:test_comp_req_kvs_key_naming_dot_rejected"
+        - "//tests/surface:surface_tests:test_comp_req_kvs_key_naming_slash_rejected"
+    tags: [persistency, kvs, keys]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-STORE
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: COMP-REQ-KVS-KEY-LENGTH
+    type: comp-req
+    title: Key Length
+    status: approved
+    description: >
+      The component shall limit the maximum length of a key to 32 bytes.
+      Eclipse: comp_req__kvs__key_length (verbatim).
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Surface tests assert that a 32-byte key is accepted and a
+        33-byte key is rejected at set_value time.
+      verified-by:
+        - "//tests/surface:surface_tests:test_comp_req_kvs_key_length_32_byte_cap_enforced"
+    tags: [persistency, kvs, keys]
+    links:
+      - type: satisfies
+        target: FEAT-REQ-PERSIST-STORE
+      - type: belongs-to
+        target: COMP-KVS
+
+  - id: COMP-REQ-KVS-KEY-ENCODING
+    type: comp-req
+    title: Key Encoding
+    status: approved
+    description: >
+      The component shall encode each key as valid UTF-8.
+      Eclipse: comp_req__kvs__key_encoding (verbatim).
+    fields:
+      req-type: functional
+      safety-level: ASIL_B
+      security: "NO"
+      verification-criteria: >
+        Satisfied by Rust's String/&str type-system guarantee (the
+        compiler refuses to construct a non-UTF-8 String). The surface
+        test exercises a valid UTF-8 key to confirm the type-flow at
+        runtime; no negative path is reachable from safe Rust.
+      verified-by:
+        - "//tests/surface:surface_tests:test_comp_req_kvs_key_encoding_valid_utf8_accepted"
     tags: [persistency, kvs, keys]
     links:
       - type: satisfies
@@ -159,6 +216,12 @@ artifacts:
       verification-criteria: >
         Fault-injection test flips bytes in storage between store
         and load; load must return IntegrityError, not corrupt value.
+      verified-by:
+        - "//tests/surface:surface_tests:test_comp_req_kvs_value_checksum_roundtrip_preserves_value"
+        - "//tests/surface:surface_tests:test_comp_req_kvs_value_checksum_corrupt_hash_yields_validation_error"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::json_backend_tests::test_load_invalid_hash_content"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::json_backend_tests::test_load_invalid_hash_len"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::json_backend_tests::test_load_invalid_data"
     tags: [persistency, kvs, integrity]
     links:
       - type: satisfies
@@ -179,6 +242,12 @@ artifacts:
       req-type: functional
       safety-level: ASIL_B
       security: "NO"
+      verified-by:
+        - "//tests/surface:surface_tests:test_comp_req_kvs_atomic_store_snapshot_count_increments_per_flush"
+        - "//tests/surface:surface_tests:test_comp_req_kvs_atomic_store_snapshot_restore_recovers_previous_value"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::kvs_backend_tests::test_flush_ok"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::kvs_backend_tests::test_snapshot_restore_ok"
+        - "//vendor/rust_kvs:rust_kvs_test:json_backend::kvs_backend_tests::test_snapshot_count_to_max"
     tags: [persistency, kvs, durability]
     links:
       - type: satisfies
@@ -198,6 +267,15 @@ artifacts:
       req-type: non-functional
       safety-level: ASIL_B
       security: "NO"
+      verification-criteria: >
+        No verifying test exists. The upstream implementation uses
+        std::collections::HashMap and Arc<Mutex> on the hot path —
+        both allocate. A real check requires witness allocator
+        instrumentation (witness::no_alloc_guard) which is not wired
+        in this example. The verify gate intentionally reports this
+        comp-req as MISSING (not PASSED) to make the gap auditable.
+        See DR-KVS-INLINE-STORAGE-GAP for the response options.
+      verified-by: []
     tags: [persistency, kvs, memory]
     links:
       - type: satisfies

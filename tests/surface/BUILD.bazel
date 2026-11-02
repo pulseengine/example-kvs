@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Surface tests: one #[test] per comp-req artifact, asserting the
+# requirement's behavior against the vendored rust_kvs implementation.
+# tools/verify.py drives this target with:
+#   bazel test //tests/surface:surface_tests \
+#       --test_arg=--exact --test_arg=<fn_name>
+# per discovered artifact (one bazel invocation per test, so each
+# artifact maps to one PASSED / FAILED / MISSING bucket entry).
+rust_test(
+    name = "surface_tests",
+    srcs = ["surface_tests.rs"],
+    edition = "2021",
+    deps = [
+        "//vendor/rust_kvs:rust_kvs",
+        "@crates//:tempfile",
+    ],
+    # rust_kvs has a static instance pool with KVS_MAX_INSTANCES=10
+    # entries, and the surface tests collectively use more than 10
+    # instance IDs. Serialising the harness avoids cross-test pool
+    # collisions. verify.py invokes one test per call so it doesn't
+    # care, but the default `bazel test //tests/surface:surface_tests`
+    # does — RUST_TEST_THREADS=1 keeps that invocation deterministic.
+    env = {"RUST_TEST_THREADS": "1"},
+)

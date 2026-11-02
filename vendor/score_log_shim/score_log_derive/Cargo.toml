@@ -1,0 +1,9 @@
+[package]
+name = "score_log_derive"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Proc-macro stand-in for eclipse-score score_log_derive; see ../README.md"
+
+[lib]
+proc-macro = true

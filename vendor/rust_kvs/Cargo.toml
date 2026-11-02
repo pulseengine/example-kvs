@@ -1,0 +1,23 @@
+# Vendored from eclipse-score/persistency, src/rust/rust_kvs/.
+# See ATTRIBUTION.md and LICENSE for source + license details.
+#
+# The original manifest uses `score_log.workspace = true` resolving
+# to `score_log = { git = "...baselibs_rust", tag = "v0.1.0" }`. In
+# this fork the workspace declaration in /Cargo.toml redirects
+# `score_log` to the local path-shim at
+# ../score_log_shim/score_log/.
+#
+# Source unmodified (every .rs file under src/ matches upstream).
+
+[package]
+name = "rust_kvs"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+adler32.workspace = true
+tinyjson.workspace = true
+score_log.workspace = true
+
+[dev-dependencies]
+tempfile = "3.20"

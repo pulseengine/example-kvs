@@ -1,0 +1,62 @@
+# example-kvs bazel configuration.
+#
+# Two named build profiles, bound to the variant model in variants/:
+#
+#   --config=dev   — fastbuild, ASAN-friendly, default rustc flags.
+#                    Mirrors the `dev` variant in variants/bindings.yaml.
+#                    Use for engineering iteration.
+#
+#   --config=prod  — release-mode + LTO + single codegen-unit + panic=abort.
+#                    Mirrors the `prod` variant in variants/bindings.yaml.
+#                    These flags are the minimum that an ASIL-B safety case
+#                    typically asks for on Rust builds:
+#                       lto=fat            single translation unit at link time
+#                       codegen-units=1    deterministic, no parallelization noise
+#                       panic=abort        no unwinding (smaller, FuSa-compatible,
+#                                          eliminates the cleanup-path surface)
+#                       opt-level=3        max speed (default for compilation_mode=opt)
+#                       overflow-checks=on intentional — ASIL-B forbids silent UB on
+#                                          integer overflow; cost is a few % in tight
+#                                          loops, acceptable for safety builds
+#                       strip=symbols      smaller binary, debuginfo lives in a
+#                                          separate file (split-debuginfo in CI)
+#
+# `make verify VARIANT=prod` passes `--config=prod` through; same for `make bazel`.
+
+# ── default settings ─────────────────────────────────────────────────
+build --java_language_version=17
+test --test_output=errors
+
+# ── --config=dev (engineering builds) ────────────────────────────────
+build:dev --compilation_mode=fastbuild
+
+# ── --config=prod (safety flags compatible with bazel test) ──────────
+# Used for `make verify VARIANT=prod` and any test-time invocation.
+# panic=abort is INTENTIONALLY OMITTED here: Rust's #[test] harness
+# requires unwinding to report failures and is incompatible with
+# panic=abort outside nightly's -Zpanic_abort_tests. panic=abort lives
+# in --config=prod_ship below for the actually-deployed binary.
+build:prod --compilation_mode=opt
+build:prod --@rules_rust//rust/settings:extra_rustc_flag=-Cembed-bitcode=yes
+build:prod --@rules_rust//rust/settings:extra_rustc_flag=-Clto=fat
+build:prod --@rules_rust//rust/settings:extra_rustc_flag=-Ccodegen-units=1
+build:prod --@rules_rust//rust/settings:extra_rustc_flag=-Coverflow-checks=on
+build:prod --@rules_rust//rust/settings:extra_rustc_flag=-Cstrip=symbols
+# Mirror codegen-units=1 on exec-target crates (proc-macros,
+# build-scripts) so the prod toolchain composes cleanly.
+build:prod --@rules_rust//rust/settings:extra_exec_rustc_flag=-Ccodegen-units=1
+
+# ── --config=prod_ship (the actually-deployed binary only) ───────────
+# Extends --config=prod with panic=abort. Use for `bazel build` of
+# shipping binaries, NEVER for `bazel test`. The deployed ASIL-B
+# Rust binary should not carry the unwinding machinery — smaller
+# code size, no cleanup-path semantics for the assessor to argue
+# about.
+#
+# Typical use:
+#   bazel build --config=prod_ship //:kvs_component
+build:prod_ship --config=prod
+build:prod_ship --@rules_rust//rust/settings:extra_rustc_flag=-Cpanic=abort
+
+# Per-user overrides (gitignored)
+try-import %workspace%/user.bazelrc

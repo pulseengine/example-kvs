@@ -1,0 +1,58 @@
+# Cargo workspace for example-kvs.
+#
+# Three roles:
+#   1. Top-level shim crate (`example-kvs-cargo-shim`) — gives MODULE.bazel's
+#      crate.from_cargo a manifest from which to materialise `@crates`.
+#      rules_wasm_component's rust_wasm_component_bindgen rule hardcodes
+#      `@crates//:wit-bindgen` (generated-bindings runtime) and
+#      `@crates//:bitflags` (WASI filesystem interfaces), and external
+#      consumers must wire both — that's why this file exists.
+#   2. Workspace member `vendor/rust_kvs/` — the eclipse-score rust_kvs
+#      sources, vendored under Apache-2.0 so the native test suite runs
+#      under bazel rust_test against the real eclipse-score implementation.
+#   3. Workspace members `vendor/score_log_shim/score_log/` and
+#      `score_log_derive/` — no-op stand-ins for eclipse-score's
+#      `score_log` macros + ScoreDebug derive (see that directory's
+#      README.md for why we shim rather than vendor baselibs_rust).
+
+[workspace]
+resolver = "2"
+members = [
+    "vendor/rust_kvs",
+    "vendor/score_log_shim/score_log",
+    "vendor/score_log_shim/score_log_derive",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+score_log = { path = "vendor/score_log_shim/score_log" }
+adler32 = "1.2.0"
+tinyjson = "2.5.1"
+
+[package]
+name = "example-kvs-cargo-shim"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# Point at an empty stub so cargo doesn't try to compile src/lib.rs
+# (the WASM component, which depends on Bazel-generated bindings).
+path = ".cargo-shim/lib.rs"
+
+[dependencies]
+# Required by rules_wasm_component (see header note above)
+bitflags = "2"
+wit-bindgen = "0.46"
+# Pulled in here so crate_universe resolves them for rust_kvs's
+# BUILD target — rules_rust BUILD targets cannot themselves
+# trigger crate_universe materialisation.
+adler32 = { workspace = true }
+tinyjson = { workspace = true }
+
+[dev-dependencies]
+# rust_kvs's dev tests use tempfile; routed via crate_universe.
+tempfile = "3.20"

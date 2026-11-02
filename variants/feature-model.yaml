@@ -1,0 +1,49 @@
+# Variant feature model for the example-kvs deployment contexts.
+#
+# Upstream eclipse-score rust_kvs has NO cargo features in the core
+# library (only the `rust_kvs_tool` binary has `stdout_logger`). All
+# variant axes are therefore RUNTIME builder-time choices:
+#   - KvsDefaults  ∈ { Ignored, Optional, Required }
+#   - KvsLoad      ∈ { Ignored, Optional, Required }
+#   - snapshot_max_count : usize  (default 3)
+#   - backend : Box<dyn KvsBackend>  (only JsonBackend implemented)
+#
+# Plus an *audit-scope* axis that is unique to this fork: which
+# comp-reqs the verify gate is expected to enforce for a given
+# deployment context. `dev` builds can legitimately exclude
+# ASIL-B safety properties that `prod` builds must honor.
+#
+# The two starter variants below cover the typical split. Add more
+# variants by extending `values:` and declaring the binding in
+# variants/bindings.yaml.
+
+feature-model:
+  name: example-kvs-deployment
+  description: >
+    Which deployment context this build targets. Determines (a) which
+    builder dials the surface tests configure the vendored Kvs with,
+    and (b) which comp-reqs the verify gate enforces (others are
+    listed as out-of-scope-for: <variant> and skipped).
+
+  features:
+
+    - name: deployment-context
+      type: choice
+      mandatory: true
+      values: [dev, prod]
+      default: dev
+      description: >
+        `dev` — engineering builds; relaxed constraints, smaller
+        snapshot ring, optional persistency on startup. Safety
+        properties marked ASIL-B that have known impl gaps are
+        excluded from the verify gate.
+
+        `prod` — production builds; strict constraints, full
+        snapshot ring, mandatory persistency on startup. Every
+        approved comp-req must have a verifying test that runs
+        green.
+
+  # Cross-variant constraint set. Empty for now — both variants are
+  # independently valid. As the example grows, add things like
+  # "deployment-context=prod implies log-level<=warn" here.
+  constraints: []

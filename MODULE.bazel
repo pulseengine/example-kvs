@@ -1,0 +1,50 @@
+"""example-kvs — Bazel module for the persistency::kvs worked example.
+
+Builds the AADL → WIT → Rust trait → WASM-component chain via
+rules_wasm_component (https://github.com/pulseengine/rules_wasm_component).
+The wit/ → bindgen → rust_component pipeline is real pulseengine
+infrastructure; this module exercises it on eclipse-score's
+persistency::kvs interface (arch/kvs.wit).
+"""
+
+module(
+    name = "example_kvs",
+    version = "0.1.0",
+)
+
+# ── rules_wasm_component (the WIT → wit-bindgen → component pipeline) ──
+bazel_dep(name = "rules_wasm_component", version = "1.0.0")
+# rules_wasm_component is not in Bazel Central Registry — pin to a
+# specific upstream commit. main is preferred over the v1.0.0 tag
+# because the tag predates the Bazel-9 CcInfo migration fix.
+git_override(
+    module_name = "rules_wasm_component",
+    remote = "https://github.com/pulseengine/rules_wasm_component.git",
+    commit = "fbe20571eee9bd05687c95e7a43f6c236d9b2428",  # main @ 2026-05-24
+)
+
+bazel_dep(name = "rules_rust", version = "0.70.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# ── crate_universe — required by rust_wasm_component_bindgen ───────────
+# The bindgen rule needs `@crates//:bitflags` (WASI filesystem ifaces)
+# and `@crates//:wit-bindgen` (generated-bindings runtime). Both are
+# hardcoded in the rule today; the rule's docstring explicitly tells
+# external consumers to wire them via their own crate_universe.
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+    supported_platform_triples = [
+        "wasm32-wasip2",
+        "wasm32-unknown-unknown",
+        "wasm32-wasip1",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+    ],
+)
+use_repo(crate, "crates")

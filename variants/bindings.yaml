@@ -1,0 +1,54 @@
+# Variant bindings — per-variant Kvs configuration + comp-req scope.
+#
+# `kvs-config:` is read by tests/surface/surface_tests.rs via the
+# RIVET_VARIANT environment variable; the fresh_kvs() helper picks
+# the appropriate KvsBuilder dials.
+#
+# `out-of-scope-for:` on each entry lists comp-req IDs that the
+# verify gate should SKIP under that variant (treated as if their
+# status were `draft`). This gives an honest "dev builds need not
+# honor production safety properties" story without rewriting the
+# artifacts.
+
+bindings:
+
+  - variant: dev
+    description: >
+      Engineering builds — fast iteration, no mandatory load, single
+      snapshot, no enforcement of the ASIL-B inline-storage rule.
+    kvs-config:
+      defaults: Ignored        # KvsDefaults::Ignored
+      kvs-load: Ignored        # KvsLoad::Ignored
+      snapshot-max-count: 1
+    # `bazel test` profile used for this variant. The `--config=dev`
+    # block in /.bazelrc sets --compilation_mode=fastbuild (debug
+    # asserts on, no optimization, fast incremental rebuilds).
+    bazel-config: dev
+    out-of-scope-for:
+      # INLINE-STORAGE is an ASIL-B no-runtime-alloc requirement. Dev
+      # builds use std HashMap freely; this requirement only gates
+      # the prod variant. Documented in DR-KVS-INLINE-STORAGE-GAP.
+      - COMP-REQ-KVS-INLINE-STORAGE
+
+  - variant: prod
+    description: >
+      Production builds — KvsDefaults::Required and KvsLoad::Required
+      mean startup fails closed if persistent state is missing;
+      snapshot ring sized for the target ECU's flash budget; every
+      approved comp-req must verify; release-mode + LTO + single
+      codegen-unit + panic=abort applied at the bazel layer.
+    kvs-config:
+      defaults: Required       # KvsDefaults::Required
+      kvs-load: Required       # KvsLoad::Required
+      snapshot-max-count: 10
+    # `--config=prod` block in /.bazelrc applies the rustc safety
+    # flags an ASIL-B assessor typically asks for (lto=fat,
+    # codegen-units=1, overflow-checks=on, strip=symbols).
+    #
+    # NOTE: panic=abort lives in --config=prod_ship (not prod) because
+    # Rust's #[test] harness needs unwinding to report failures.
+    # Use `bazel build --config=prod_ship //:kvs_component` for the
+    # actually-shipped binary; use `--config=prod` for `bazel test`.
+    bazel-config: prod
+    bazel-config-ship: prod_ship
+    out-of-scope-for: []       # everything in scope

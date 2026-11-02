@@ -2,3 +2,9 @@
 *.swp
 .DS_Store
 /tmp-*/
+
+# Bazel outputs
+bazel-*
+MODULE.bazel.lock
+/target/
+

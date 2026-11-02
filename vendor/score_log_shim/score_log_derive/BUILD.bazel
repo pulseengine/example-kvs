@@ -1,0 +1,12 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+package(default_visibility = ["//visibility:public"])
+
+# Proc-macro for #[derive(ScoreDebug)]. Emits an empty token stream;
+# see src/lib.rs for why.
+rust_proc_macro(
+    name = "score_log_derive",
+    srcs = ["src/lib.rs"],
+    edition = "2021",
+    crate_name = "score_log_derive",
+)
