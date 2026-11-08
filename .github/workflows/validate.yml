@@ -41,7 +41,7 @@ jobs:
         run: pip install pyyaml
 
       - name: Set up bazelisk
-        uses: bazel-contrib/setup-bazel@0.9.1
+        uses: bazel-contrib/setup-bazel@0.19.1
         with:
           bazelisk-version: "1.x"
 
