@@ -60,7 +60,11 @@ spec/impl delta a CI signal, where a coverage dashboard hides it as
 a wedge." The eclipse-score project itself is healthy and well-run;
 the methodology is the lesson.
 
-**The gate calls this out by going RED.** Current `make verify` output:
+**The gate reports this as KNOWN-GAP.** Until 2026-11 the gate went
+red on this finding, which hid every other regression behind the same
+signal. The gap is now waived by `DR-KVS-KEY-VALIDATION-GAP`, an approved
+decision record tagged `known-gap`. The four surface tests still run on
+every `make verify` and are listed by name. Current output (dev variant):
 
 ```
 BUCKET    ID                            EVIDENCE
@@ -68,16 +72,20 @@ BUCKET    ID                            EVIDENCE
 PASSED    COMP-REQ-KVS-KEY-ENCODING     1 test(s) all green
 PASSED    COMP-REQ-KVS-VALUE-CHECKSUM   5 test(s) all green
 PASSED    COMP-REQ-KVS-ATOMIC-STORE     5 test(s) all green
-FAILED    COMP-REQ-KVS-KEY-NAMING       3 test(s) failed:
+KNOWN-GAP COMP-REQ-KVS-KEY-NAMING       3 test(s) failed, waived by DR-KVS-KEY-VALIDATION-GAP:
                                           - test_..._space_rejected
                                           - test_..._dot_rejected
                                           - test_..._slash_rejected
-FAILED    COMP-REQ-KVS-KEY-LENGTH       1 test(s) failed:
+KNOWN-GAP COMP-REQ-KVS-KEY-LENGTH       1 test(s) failed, waived by DR-KVS-KEY-VALIDATION-GAP:
                                           - test_..._32_byte_cap_enforced
-MISSING   COMP-REQ-KVS-INLINE-STORAGE   verified-by is absent or empty
 ─────────────────────────────────────────────────────────────────────
-3 PASSED, 2 FAILED, 1 MISSING
+3 PASSED, 0 FAILED, 0 MISSING, 2 KNOWN-GAP, 0 STALE-GAP
 ```
+
+The waiver only covers FAILED. A waived comp-req whose tests all pass
+is reported as STALE-GAP and fails the gate until the decision record
+is removed. MISSING evidence is never waivable. `make verify VARIANT=prod`
+additionally lists COMP-REQ-KVS-INLINE-STORAGE as MISSING and exits 1.
 
 INLINE-STORAGE is MISSING (not PASSED) on purpose: the spec asks for
 "no runtime heap allocation," upstream uses HashMap + Arc<Mutex> which
@@ -88,14 +96,15 @@ DR-KVS-INLINE-STORAGE-GAP records the three response options
 
 The surface tests at [`tests/surface/surface_tests.rs`](tests/surface/surface_tests.rs)
 assert exactly what the upstream RST says — no pulseengine-side
-embellishment. CI is intentionally red on this finding.
+embellishment.
 
 This is the **demonstration**: a coverage-percentage dashboard would
 mark these comp-reqs "covered" because some test mentions the module
 they belong to. Pulseengine's `verified-by:` mechanism forces
 test-to-requirement traceability at the level of named test functions,
 and the gate then asserts each named test PASSED. Requirements with no
-verifying test stay loudly red.
+verifying test stay loudly red; a failing test is only accepted with a
+named, approved decision record.
 
 ## What this gate measures
 
@@ -107,6 +116,9 @@ Each comp-req artifact carries a `verified-by:` list of
 2. **Runs** — invokes `bazel test --test_arg=--exact --test_arg=<name>`
    per entry. Any non-zero exit → bucket `FAILED`. All green → bucket
    `PASSED`.
+3. **Waives** — a `FAILED` comp-req that an approved `known-gap`
+   decision record links with `satisfies` → bucket `KNOWN-GAP`
+   (exit 0). If such a comp-req passes → bucket `STALE-GAP` (exit 1).
 
 Each comp-req artifact lists its evidence. For the KEY-NAMING / KEY-LENGTH
 falsifications, the response options are explicit:
