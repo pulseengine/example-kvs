@@ -129,6 +129,41 @@ artifacts:
       - type: belongs-to
         target: COMP-KVS
 
+  - id: DR-KVS-KEY-VALIDATION-GAP
+    type: decision-record
+    title: Upstream rust_kvs does not enforce key naming or key length
+    status: approved
+    description: >
+      Known-gap waiver for COMP-REQ-KVS-KEY-NAMING and
+      COMP-REQ-KVS-KEY-LENGTH. The verify gate reports both as
+      KNOWN-GAP instead of FAILED while this record is approved.
+    fields:
+      rationale: >
+        Vendored rust_kvs set_value accepts keys containing space, '.'
+        and '/' and keys longer than 32 bytes (kvs.rs:238; no length
+        constant exists). The C++ binding carries an open TODO for key
+        handling. Four surface tests fail against the verbatim upstream
+        spec text. The finding is recorded in the README; keeping main
+        red on it hid every other regression behind the same signal.
+      alternatives: >
+        (a) add key validation to the vendored impl, diverging from
+        upstream; (b) propose validation upstream in
+        eclipse-score/persistency and re-vendor; (c) downgrade both
+        comp-reqs to draft.
+      consequences: >
+        The four surface tests still run and are reported as KNOWN-GAP
+        on every verify. When they pass, verify reports STALE-GAP and
+        fails until this record is removed. A new failure on any other
+        comp-req still fails the gate.
+    tags: [persistency, kvs, decision, keys, known-gap]
+    links:
+      - type: satisfies
+        target: COMP-REQ-KVS-KEY-NAMING
+      - type: satisfies
+        target: COMP-REQ-KVS-KEY-LENGTH
+      - type: belongs-to
+        target: COMP-KVS
+
   # ── Test specifications ────────────────────────────────────────────
   # The artifact-driven verification gate (tools/verify.py) looks for
   # tests matching `test_<lowercase-id-with-dashes-as-underscores>_*`

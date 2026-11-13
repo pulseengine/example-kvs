@@ -12,7 +12,15 @@ buckets the artifact:
   MISSING — verified-by is absent / empty, OR one of the listed tests
             was not present in the bazel target's test binary.
 
-Exit code: 0 iff no FAILED and no MISSING.
+  KNOWN-GAP — would be FAILED, but an approved decision-record tagged
+              `known-gap` links `satisfies` to the comp-req. Reported,
+              does not fail the gate. Only FAILED is waivable; MISSING
+              is not.
+  STALE-GAP — a known-gap waiver exists but every listed test PASSED.
+              Fails the gate until the waiver is removed, so a waiver
+              cannot outlive the gap it records.
+
+Exit code: 0 iff no FAILED, no MISSING and no STALE-GAP.
 
 This is intentionally an honest gate. If upstream code does not honor
 a requirement, the surface test fires red and the gate goes red. That
@@ -87,6 +95,31 @@ def expected_artifacts(artifact_dir: pathlib.Path,
                 continue
             verified = art.get("fields", {}).get("verified-by", []) or []
             out.append({"id": art["id"], "verified-by": list(verified)})
+    return out
+
+
+def known_gaps(artifact_dir: pathlib.Path) -> dict[str, list[str]]:
+    """Map comp-req id -> ids of approved `known-gap` decision-records.
+
+    A decision-record waives a comp-req when it has status approved,
+    carries the tag `known-gap`, and links `satisfies` to the comp-req.
+    """
+    out: dict[str, list[str]] = {}
+    for path in sorted(artifact_dir.glob("*.yaml")):
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except yaml.YAMLError:
+            continue
+        for art in data.get("artifacts", []):
+            if art.get("type") != "decision-record":
+                continue
+            if art.get("status") != "approved":
+                continue
+            if "known-gap" not in (art.get("tags") or []):
+                continue
+            for link in art.get("links", []) or []:
+                if link.get("type") == "satisfies" and link.get("target"):
+                    out.setdefault(link["target"], []).append(art["id"])
     return out
 
 
@@ -203,9 +236,12 @@ def main(argv: list[str]) -> int:
         print(f"# variant={args.variant} — skipping {len(skip)} out-of-scope comp-req(s): "
               f"{', '.join(sorted(skip))}")
     artifacts = expected_artifacts(args.artifacts, skip_ids=skip)
+    waivers = known_gaps(args.artifacts)
     passed: list[tuple[str, list[str]]] = []
     failed: list[tuple[str, list[str]]] = []
     missing: list[tuple[str, str]] = []
+    known: list[tuple[str, list[str], list[str]]] = []
+    stale: list[tuple[str, list[str]]] = []
 
     for art in artifacts:
         aid = art["id"]
@@ -248,7 +284,12 @@ def main(argv: list[str]) -> int:
             missing.append((aid,
                 f"{len(gone)} listed test(s) not present in target: " + ", ".join(gone)))
         elif failed_here:
-            failed.append((aid, failed_here))
+            if aid in waivers and not args.no_run:
+                known.append((aid, failed_here, waivers[aid]))
+            else:
+                failed.append((aid, failed_here))
+        elif aid in waivers and not args.no_run:
+            stale.append((aid, waivers[aid]))
         else:
             passed.append((aid, passed_here))
 
@@ -263,22 +304,35 @@ def main(argv: list[str]) -> int:
             print(f"{'':9s} {'':40s}   - {e}")
     for aid, reason in missing:
         print(f"{'MISSING':9s} {aid:40s} {reason}")
+    for aid, entries, drs in known:
+        print(f"{'KNOWN-GAP':9s} {aid:40s} {len(entries)} test(s) failed, "
+              f"waived by {', '.join(drs)}:")
+        for e in entries:
+            print(f"{'':9s} {'':40s}   - {e}")
+    for aid, drs in stale:
+        print(f"{'STALE-GAP':9s} {aid:40s} all tests PASSED; remove the "
+              f"known-gap waiver in {', '.join(drs)}")
     print("─" * 100)
-    print(f"{len(passed)} PASSED, {len(failed)} FAILED, {len(missing)} MISSING")
+    print(f"{len(passed)} PASSED, {len(failed)} FAILED, {len(missing)} MISSING, "
+          f"{len(known)} KNOWN-GAP, {len(stale)} STALE-GAP")
 
     # ── machine-readable report ─────────────────────────────────────
     args.report.write_text(json.dumps({
         "passed":  [{"id": a, "tests": e} for a, e in passed],
         "failed":  [{"id": a, "tests": e} for a, e in failed],
         "missing": [{"id": a, "reason": r} for a, r in missing],
+        "known_gap": [{"id": a, "tests": e, "waived_by": d} for a, e, d in known],
+        "stale_gap": [{"id": a, "waived_by": d} for a, d in stale],
         "counts": {
             "passed": len(passed),
             "failed": len(failed),
             "missing": len(missing),
+            "known_gap": len(known),
+            "stale_gap": len(stale),
         },
     }, indent=2))
 
-    return 1 if (failed or missing) else 0
+    return 1 if (failed or missing or stale) else 0
 
 
 if __name__ == "__main__":
