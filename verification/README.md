@@ -11,7 +11,7 @@ Two parts:
 
 2. **`../tools/verify.py`** — the artifact-driven verification gate
    (see top-level README). Walks the rivet artifacts looking for
-   `comp-req`s with `status: approved`, finds tests by name
+   `comp-req`s with `status: valid`, finds tests by name
    convention (`test_<id-lowercased-dashed>_*`), runs them, reports
    pass/fail/missing per artifact. Same shape as the LS-N gate in
    `pulseengine/meld`.

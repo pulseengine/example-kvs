@@ -14,7 +14,7 @@ artifacts:
   - id: STKH-REQ-PERSIST-STORAGE
     type: stkh-req
     title: Persistent storage capability
-    status: approved
+    status: valid
     description: >
       The SW-platform shall provide persistent storage for application
       data that survives power-cycles and software updates.
@@ -31,7 +31,7 @@ artifacts:
   - id: STKH-REQ-PERSIST-INTEGRITY
     type: stkh-req
     title: Stored-data integrity
-    status: approved
+    status: valid
     description: >
       The SW-platform shall detect corruption of persisted data
       caused by power-loss-during-write or media degradation.
@@ -47,7 +47,7 @@ artifacts:
   - id: FEAT-REQ-PERSIST-STORE
     type: feat-req
     title: Store data
-    status: approved
+    status: valid
     description: >
       The persistency feature shall accept (key, value) pairs and
       persist them durably across power cycles.
@@ -67,7 +67,7 @@ artifacts:
   - id: FEAT-REQ-PERSIST-LOAD
     type: feat-req
     title: Load data
-    status: approved
+    status: valid
     description: >
       The persistency feature shall retrieve a previously-stored
       value by key, or report not-found.
@@ -84,7 +84,7 @@ artifacts:
   - id: FEAT-REQ-PERSIST-INTEGRITY-CHECK
     type: feat-req
     title: Integrity check on load
-    status: approved
+    status: valid
     description: >
       The persistency feature shall compute and verify a checksum
       on every load, returning an error rather than corrupted data
@@ -102,7 +102,7 @@ artifacts:
   - id: FEAT-REQ-PERSIST-NO-RUNTIME-ALLOC
     type: feat-req
     title: No dynamic allocation post-init
-    status: approved
+    status: valid
     description: >
       The persistency feature shall not perform heap allocation
       after initialization (no malloc/free on the hot path).
@@ -125,7 +125,7 @@ artifacts:
   - id: COMP-REQ-KVS-KEY-NAMING
     type: comp-req
     title: Key Naming
-    status: approved
+    status: valid
     description: >
       The component shall accept keys that consist solely of alphanumeric
       characters, underscores, or dashes.
@@ -156,7 +156,7 @@ artifacts:
   - id: COMP-REQ-KVS-KEY-LENGTH
     type: comp-req
     title: Key Length
-    status: approved
+    status: valid
     description: >
       The component shall limit the maximum length of a key to 32 bytes.
       Eclipse: comp_req__kvs__key_length (verbatim).
@@ -179,7 +179,7 @@ artifacts:
   - id: COMP-REQ-KVS-KEY-ENCODING
     type: comp-req
     title: Key Encoding
-    status: approved
+    status: valid
     description: >
       The component shall encode each key as valid UTF-8.
       Eclipse: comp_req__kvs__key_encoding (verbatim).
@@ -204,7 +204,7 @@ artifacts:
   - id: COMP-REQ-KVS-VALUE-CHECKSUM
     type: comp-req
     title: Per-value checksum
-    status: approved
+    status: valid
     description: >
       Each stored value shall carry a CRC32C checksum computed at
       store time and verified at load time.
@@ -232,7 +232,7 @@ artifacts:
   - id: COMP-REQ-KVS-ATOMIC-STORE
     type: comp-req
     title: Atomic store under power loss
-    status: approved
+    status: valid
     description: >
       A store operation shall either complete fully and durably
       or leave the previous value intact. Partial writes must
@@ -258,7 +258,7 @@ artifacts:
   - id: COMP-REQ-KVS-INLINE-STORAGE
     type: comp-req
     title: Inline storage, no runtime allocation
-    status: approved
+    status: valid
     description: >
       KVS shall use pre-allocated inline buffers sized at component
       initialization; no heap allocation on the hot path.

@@ -62,29 +62,31 @@ the methodology is the lesson.
 
 **The gate reports this as KNOWN-GAP.** Until 2026-11 the gate went
 red on this finding, which hid every other regression behind the same
-signal. The gap is now waived by `DR-KVS-KEY-VALIDATION-GAP`, an approved
+signal. The gap is now waived by `DR-KVS-KEY-VALIDATION-GAP`, a valid
 decision record tagged `known-gap`. The four surface tests still run on
 every `make verify` and are listed by name. Current output (dev variant):
 
 ```
 BUCKET    ID                            EVIDENCE
 ─────────────────────────────────────────────────────────────────────
+PASSED    COMP-REQ-KVS-ATOMIC-STORE     5 test(s) all green
 PASSED    COMP-REQ-KVS-KEY-ENCODING     1 test(s) all green
 PASSED    COMP-REQ-KVS-VALUE-CHECKSUM   5 test(s) all green
-PASSED    COMP-REQ-KVS-ATOMIC-STORE     5 test(s) all green
+KNOWN-GAP COMP-REQ-KVS-KEY-LENGTH       1 test(s) failed, waived by DR-KVS-KEY-VALIDATION-GAP:
+                                          - test_..._32_byte_cap_enforced
 KNOWN-GAP COMP-REQ-KVS-KEY-NAMING       3 test(s) failed, waived by DR-KVS-KEY-VALIDATION-GAP:
                                           - test_..._space_rejected
                                           - test_..._dot_rejected
                                           - test_..._slash_rejected
-KNOWN-GAP COMP-REQ-KVS-KEY-LENGTH       1 test(s) failed, waived by DR-KVS-KEY-VALIDATION-GAP:
-                                          - test_..._32_byte_cap_enforced
 ─────────────────────────────────────────────────────────────────────
 3 PASSED, 0 FAILED, 0 MISSING, 2 KNOWN-GAP, 0 STALE-GAP
 ```
 
 The waiver only covers FAILED. A waived comp-req whose tests all pass
 is reported as STALE-GAP and fails the gate until the decision record
-is removed. MISSING evidence is never waivable. `make verify VARIANT=prod`
+is removed. MISSING evidence, a malformed `verified-by:` entry and a
+build or discovery error are never waivable: only a test that ran and
+failed is. `tools/test_verify.py` checks these rules in CI. `make verify VARIANT=prod`
 additionally lists COMP-REQ-KVS-INLINE-STORAGE as MISSING and exits 1.
 
 INLINE-STORAGE is MISSING (not PASSED) on purpose: the spec asks for
@@ -104,7 +106,7 @@ they belong to. Pulseengine's `verified-by:` mechanism forces
 test-to-requirement traceability at the level of named test functions,
 and the gate then asserts each named test PASSED. Requirements with no
 verifying test stay loudly red; a failing test is only accepted with a
-named, approved decision record.
+named, valid decision record.
 
 ## What this gate measures
 
@@ -116,7 +118,7 @@ Each comp-req artifact carries a `verified-by:` list of
 2. **Runs** — invokes `bazel test --test_arg=--exact --test_arg=<name>`
    per entry. Any non-zero exit → bucket `FAILED`. All green → bucket
    `PASSED`.
-3. **Waives** — a `FAILED` comp-req that an approved `known-gap`
+3. **Waives** — a `FAILED` comp-req that a valid `known-gap`
    decision record links with `satisfies` → bucket `KNOWN-GAP`
    (exit 0). If such a comp-req passes → bucket `STALE-GAP` (exit 1).
 
@@ -126,8 +128,8 @@ falsifications, the response options are explicit:
 - Add runtime validation to the impl → tests go green.
 - Edit the upstream RST to drop those requirements → artifact updates,
   tests can be deleted.
-- Downgrade the comp-req's `status` from `approved` to `draft` (the
-  gate only enforces approved artifacts).
+- Downgrade the comp-req's `status` from `valid` to `draft` (the
+  gate only enforces valid artifacts).
 
 All three are legitimate engineering responses to evidence — the gate
 makes the choice explicit, where a coverage-wedge visualisation makes
@@ -142,7 +144,7 @@ it implicit.
 | `tests/surface/surface_tests.rs` | One `#[test]` per comp-req, asserting requirement-as-test against the vendored upstream code (verbatim spec text, no embellishment) | None — eclipse tests are organized by module, not requirement |
 | `arch/kvs.aadl` (spar AADL) | Typed feature group + subprogram signatures + ARP4761 safety properties | None |
 | `arch/kvs.wit` (binary contract) | WIT interface that wit-bindgen turns into a Rust trait. `src/lib.rs` implements that trait by **delegating to the vendored eclipse-score `rust_kvs`**; the .wasm component therefore links the *real* upstream code, not a toy stub. If the upstream API drifts or the WIT signature drifts, the Rust compile fails — binary-contract enforcement runs over real code. | None — interface stops at the rendered diagram |
-| `tools/verify.py` (artifact-driven gate) | Walks every approved comp-req, reads `verified-by:`, runs `bazel test` per entry, exits red on any gap | None — eclipse renders a coverage pie chart |
+| `tools/verify.py` (artifact-driven gate) | Walks every valid comp-req (read through `rivet list --format json --full`), reads `verified-by:`, runs `bazel test` per entry, exits red on any gap | None — eclipse renders a coverage pie chart |
 | `attestation/release-manifest.yaml` (sigil) | Signed in-toto-style attestation tying artifact hashes + WIT hash + evidence hashes | Green CI badge |
 
 ## What's *real* infrastructure vs *example skeleton*

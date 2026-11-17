@@ -40,7 +40,7 @@ feature-model:
 
         `prod` — production builds; strict constraints, full
         snapshot ring, mandatory persistency on startup. Every
-        approved comp-req must have a verifying test that runs
+        valid comp-req must have a verifying test that runs
         green.
 
   # Cross-variant constraint set. Empty for now — both variants are

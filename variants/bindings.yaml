@@ -35,7 +35,7 @@ bindings:
       Production builds — KvsDefaults::Required and KvsLoad::Required
       mean startup fails closed if persistent state is missing;
       snapshot ring sized for the target ECU's flash budget; every
-      approved comp-req must verify; release-mode + LTO + single
+      valid comp-req must verify; release-mode + LTO + single
       codegen-unit + panic=abort applied at the bazel layer.
     kvs-config:
       defaults: Required       # KvsDefaults::Required
