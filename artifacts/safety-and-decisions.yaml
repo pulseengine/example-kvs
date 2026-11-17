@@ -9,7 +9,7 @@ artifacts:
   - id: FMEA-KVS-SILENT-CORRUPTION
     type: fmea-entry
     title: Silent corruption of stored value
-    status: approved
+    status: valid
     description: >
       Power loss mid-write leaves a stored value in a torn state,
       not detected by integrity check.
@@ -37,7 +37,7 @@ artifacts:
   - id: FMEA-KVS-CHECKSUM-BYPASS
     type: fmea-entry
     title: Checksum verification bypassed on hot path
-    status: approved
+    status: valid
     description: >
       An optimisation path skips checksum verification under
       certain conditions, allowing corrupted data through.
@@ -66,7 +66,7 @@ artifacts:
   - id: DR-KVS-BACKEND-CHOICE
     type: decision-record
     title: JSON file backend with snapshot rotation (no WAL backend)
-    status: approved
+    status: valid
     description: Selection of the durable storage backend that ships today.
     fields:
       rationale: >
@@ -99,7 +99,7 @@ artifacts:
   - id: DR-KVS-INLINE-STORAGE-GAP
     type: decision-record
     title: Inline-storage requirement is unmet by the current backend
-    status: approved
+    status: valid
     description: Tracking the gap between the spec and the impl.
     fields:
       rationale: >
@@ -132,11 +132,11 @@ artifacts:
   - id: DR-KVS-KEY-VALIDATION-GAP
     type: decision-record
     title: Upstream rust_kvs does not enforce key naming or key length
-    status: approved
+    status: valid
     description: >
       Known-gap waiver for COMP-REQ-KVS-KEY-NAMING and
       COMP-REQ-KVS-KEY-LENGTH. The verify gate reports both as
-      KNOWN-GAP instead of FAILED while this record is approved.
+      KNOWN-GAP instead of FAILED while this record is valid.
     fields:
       rationale: >
         Vendored rust_kvs set_value accepts keys containing space, '.'
@@ -164,17 +164,47 @@ artifacts:
       - type: belongs-to
         target: COMP-KVS
 
+  - id: DR-KVS-ARTIFACTS-THROUGH-RIVET
+    type: decision-record
+    title: Artifacts use the score status vocabulary and are read through rivet
+    status: valid
+    description: >
+      The verify gate reads artifacts with `rivet list --format json --full`
+      instead of parsing artifacts/*.yaml with PyYAML (issue #5), and every
+      artifact uses `status: valid` instead of `approved`.
+    fields:
+      rationale: >
+        The vendored score schema allows status draft, valid, invalid,
+        in_progress or obsolete. All 34 artifacts said `approved`; rivet
+        v0.13.0 did not check the value, rivet v0.41.1 rejects all 34.
+        `valid` is also eclipse-score's own term (`:status: valid`). Org
+        policy (#5) is that a repository reads its own artifact files
+        through rivet, which needs `list --full` (not in v0.13.0).
+      alternatives: >
+        (a) keep rivet v0.13.0 and the PyYAML reader, leaving the status
+        values unchecked; (b) extend the schema with `approved`, diverging
+        from the vendored score schema.
+      consequences: >
+        CI installs rivet v0.41.1. The gate scope is comp-reqs with status
+        valid; known-gap waivers must be valid decision-records.
+        variants/bindings.yaml is still read with PyYAML until
+        pulseengine/rivet#1094 lands.
+    tags: [tooling, decision, verification]
+    links:
+      - type: belongs-to
+        target: COMP-KVS
+
   # ── Test specifications ────────────────────────────────────────────
   # The artifact-driven verification gate (tools/verify.py) looks for
   # tests matching `test_<lowercase-id-with-dashes-as-underscores>_*`
-  # for every comp-req with status: approved. Each test-spec below
+  # for every comp-req with status: valid. Each test-spec below
   # names the test convention explicitly so the artifact ↔ test
   # binding is auditable.
 
   - id: TEST-SPEC-KVS-KEY-VALIDATOR
     type: test-spec
     title: Key validator unit tests
-    status: approved
+    status: valid
     description: >
       Unit-level coverage of the syntactic key validator. Boundary
       cases: empty string, single-char, 254/255/256 length,
@@ -194,7 +224,7 @@ artifacts:
   - id: TEST-SPEC-KVS-CHECKSUM-FAULT-INJECT
     type: test-spec
     title: Checksum verification fault-injection tests
-    status: approved
+    status: valid
     description: >
       Fault-injection tests that flip bytes in the backing store
       between store and load. Each load must return IntegrityError.
@@ -212,7 +242,7 @@ artifacts:
   - id: TEST-SPEC-KVS-ATOMIC-STORE-POWERLOSS
     type: test-spec
     title: Atomic-store power-loss simulation
-    status: approved
+    status: valid
     description: >
       Simulated power-loss between WAL append and table update;
       after recovery, only the previous-value or the new-value

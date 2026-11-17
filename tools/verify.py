@@ -2,7 +2,7 @@
 """verify.py — artifact-driven verification gate for example-kvs.
 
 Same shape as the LS-N gate in pulseengine/meld. Walks every comp-req
-artifact whose status is `approved`, reads its `verified-by:` field
+artifact whose status is `valid`, reads its `verified-by:` field
 (a list of strings of the form `<bazel-target>:<test-fn-name>`), runs
 each test via `bazel test --test_arg=--exact --test_arg=<name>`, and
 buckets the artifact:
@@ -12,10 +12,11 @@ buckets the artifact:
   MISSING — verified-by is absent / empty, OR one of the listed tests
             was not present in the bazel target's test binary.
 
-  KNOWN-GAP — would be FAILED, but an approved decision-record tagged
+  KNOWN-GAP — would be FAILED, but a valid decision-record tagged
               `known-gap` links `satisfies` to the comp-req. Reported,
-              does not fail the gate. Only FAILED is waivable; MISSING
-              is not.
+              does not fail the gate. Only a test that ran and failed is
+              waivable; MISSING, a malformed entry or a build/discovery
+              error stays FAILED.
   STALE-GAP — a known-gap waiver exists but every listed test PASSED.
               Fails the gate until the waiver is removed, so a waiver
               cannot outlive the gap it records.
@@ -26,8 +27,14 @@ This is intentionally an honest gate. If upstream code does not honor
 a requirement, the surface test fires red and the gate goes red. That
 is the demonstration vs. eclipse-score's coverage-wedge approach.
 
+Artifacts are read through rivet (`rivet list --format json --full`),
+not parsed as YAML here: the repository reads its own artifact files
+through rivet's owned YAML stack (issue #5). variants/bindings.yaml is
+not a rivet artifact file and is still read with PyYAML until rivet
+can print an arbitrary YAML file as JSON (pulseengine/rivet#1094).
+
 Usage:
-    python3 tools/verify.py [--artifacts artifacts]
+    python3 tools/verify.py [--rivet rivet] [--schemas vendor/rivet-schemas]
                             [--report .verify-output.json]
                             [--no-run]   # discovery only, do not invoke bazel
 
@@ -72,54 +79,59 @@ def parse_verified_by(entry: str) -> tuple[str, str]:
 # ── artifact discovery ───────────────────────────────────────────────
 
 
-def expected_artifacts(artifact_dir: pathlib.Path,
+def load_artifacts(rivet: str, schemas: str | None) -> list[dict]:
+    """Every artifact in the project, as `rivet list --format json --full`
+    reports it (id, type, status, tags, links, fields)."""
+    cmd = [rivet]
+    if schemas:
+        cmd += ["--schemas", schemas]
+    cmd += ["list", "--format", "json", "--full"]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"{' '.join(cmd)} failed (exit {proc.returncode}):\n{proc.stderr}"
+        )
+    return json.loads(proc.stdout)["artifacts"]
+
+
+def expected_artifacts(artifacts: list[dict],
                        skip_ids: set[str] | None = None) -> list[dict]:
-    """Approved comp-reqs with their (possibly empty) verified-by list.
+    """Valid comp-reqs with their (possibly empty) verified-by list.
 
     If `skip_ids` is provided, artifacts whose id is in the set are
     omitted (used to honor a variant's `out-of-scope-for:` list).
     """
     skip = skip_ids or set()
     out = []
-    for path in sorted(artifact_dir.glob("*.yaml")):
-        try:
-            data = yaml.safe_load(path.read_text()) or {}
-        except yaml.YAMLError:
+    for art in artifacts:
+        if art.get("type") != "comp-req":
             continue
-        for art in data.get("artifacts", []):
-            if art.get("type") != "comp-req":
-                continue
-            if art.get("status") != "approved":
-                continue
-            if art["id"] in skip:
-                continue
-            verified = art.get("fields", {}).get("verified-by", []) or []
-            out.append({"id": art["id"], "verified-by": list(verified)})
+        if art.get("status") != "valid":
+            continue
+        if art["id"] in skip:
+            continue
+        verified = (art.get("fields") or {}).get("verified-by", []) or []
+        out.append({"id": art["id"], "verified-by": list(verified)})
     return out
 
 
-def known_gaps(artifact_dir: pathlib.Path) -> dict[str, list[str]]:
-    """Map comp-req id -> ids of approved `known-gap` decision-records.
+def known_gaps(artifacts: list[dict]) -> dict[str, list[str]]:
+    """Map comp-req id -> ids of valid `known-gap` decision-records.
 
-    A decision-record waives a comp-req when it has status approved,
+    A decision-record waives a comp-req when it has status valid,
     carries the tag `known-gap`, and links `satisfies` to the comp-req.
     """
     out: dict[str, list[str]] = {}
-    for path in sorted(artifact_dir.glob("*.yaml")):
-        try:
-            data = yaml.safe_load(path.read_text()) or {}
-        except yaml.YAMLError:
+    for art in artifacts:
+        if art.get("type") != "decision-record":
             continue
-        for art in data.get("artifacts", []):
-            if art.get("type") != "decision-record":
-                continue
-            if art.get("status") != "approved":
-                continue
-            if "known-gap" not in (art.get("tags") or []):
-                continue
-            for link in art.get("links", []) or []:
-                if link.get("type") == "satisfies" and link.get("target"):
-                    out.setdefault(link["target"], []).append(art["id"])
+        if art.get("status") != "valid":
+            continue
+        if "known-gap" not in (art.get("tags") or []):
+            continue
+        for link in art.get("links", []) or []:
+            if link.get("type") == "satisfies" and link.get("target"):
+                out.setdefault(link["target"], []).append(art["id"])
     return out
 
 
@@ -217,8 +229,10 @@ def run_one_test(target: str, test_name: str) -> bool:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--artifacts", type=pathlib.Path,
-                    default=pathlib.Path("artifacts"))
+    ap.add_argument("--rivet", type=str, default="rivet",
+                    help="rivet binary used to read the artifacts")
+    ap.add_argument("--schemas", type=str, default=None,
+                    help="Schema directory passed to rivet --schemas")
     ap.add_argument("--variants", type=pathlib.Path,
                     default=pathlib.Path("variants"),
                     help="Directory containing feature-model.yaml + bindings.yaml")
@@ -235,8 +249,9 @@ def main(argv: list[str]) -> int:
     if skip:
         print(f"# variant={args.variant} — skipping {len(skip)} out-of-scope comp-req(s): "
               f"{', '.join(sorted(skip))}")
-    artifacts = expected_artifacts(args.artifacts, skip_ids=skip)
-    waivers = known_gaps(args.artifacts)
+    all_artifacts = load_artifacts(args.rivet, args.schemas)
+    artifacts = expected_artifacts(all_artifacts, skip_ids=skip)
+    waivers = known_gaps(all_artifacts)
     passed: list[tuple[str, list[str]]] = []
     failed: list[tuple[str, list[str]]] = []
     missing: list[tuple[str, str]] = []
@@ -253,13 +268,16 @@ def main(argv: list[str]) -> int:
         # Parse + check presence + run.
         gone: list[str] = []
         failed_here: list[str] = []
+        # Malformed entries and build/discovery errors: the test never ran,
+        # so a known-gap waiver must not cover them.
+        broken_here: list[str] = []
         passed_here: list[str] = []
 
         for entry in entries:
             try:
                 target, test_name = parse_verified_by(entry)
             except ValueError as e:
-                failed_here.append(f"{entry}: malformed ({e})")
+                broken_here.append(f"{entry}: malformed ({e})")
                 continue
 
             # Presence check.
@@ -268,7 +286,7 @@ def main(argv: list[str]) -> int:
                     gone.append(f"{target}::{test_name}")
                     continue
             except Exception as e:
-                failed_here.append(f"{entry}: discovery failed: {e}")
+                broken_here.append(f"{entry}: discovery failed: {e}")
                 continue
 
             if args.no_run:
@@ -283,6 +301,8 @@ def main(argv: list[str]) -> int:
         if gone:
             missing.append((aid,
                 f"{len(gone)} listed test(s) not present in target: " + ", ".join(gone)))
+        elif broken_here:
+            failed.append((aid, broken_here + failed_here))
         elif failed_here:
             if aid in waivers and not args.no_run:
                 known.append((aid, failed_here, waivers[aid]))

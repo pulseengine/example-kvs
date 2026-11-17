@@ -55,7 +55,7 @@ wit:
 
 # ── Artifact-driven verification gate (always runs) ─────────────────
 # Same shape as the LS-N gate in pulseengine/meld. Walks every
-# comp-req with status:approved, finds tests by name convention,
+# comp-req with status:valid, reads its verified-by tests through rivet,
 # reports PASSED / FAILED / MISSING per artifact. Exits 1 if any
 # FAILED or MISSING.
 #
@@ -64,7 +64,7 @@ wit:
 # scopes in or out.
 VARIANT ?= dev
 verify:
-	@$(PYTHON) tools/verify.py --artifacts artifacts --variant $(VARIANT)
+	@$(PYTHON) tools/verify.py --rivet $(RIVET) --schemas $(SCHEMAS) --variant $(VARIANT)
 
 # ── sigil-signed release manifest (optional) ────────────────────────
 attest:

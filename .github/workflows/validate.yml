@@ -33,7 +33,7 @@ jobs:
       - name: Install rivet
         run: |
           cargo install --git https://github.com/pulseengine/rivet \
-              --tag v0.13.0 \
+              --tag v0.41.1 \
               rivet-cli --bin rivet --locked
           rivet --version
 
@@ -50,6 +50,9 @@ jobs:
 
       - name: bazel build (AADL → WIT → wit-bindgen → wasm component)
         run: bazel build //...
+
+      - name: verify.py bucketing self-test (rivet and bazel stubbed)
+        run: python3 -m unittest discover -s tools -p 'test_verify.py' -v
 
       - name: artifact-driven verification gate (real bazel test per artifact)
         # verify.py shells out to `bazel test --test_arg=--exact …` per

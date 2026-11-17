@@ -10,7 +10,7 @@ artifacts:
   - id: FEAT-PERSISTENCY
     type: feat
     title: Persistency
-    status: approved
+    status: valid
     description: >
       User-visible persistency feature exposed through a managed API.
       Eclipse: feat__persistency.
@@ -33,7 +33,7 @@ artifacts:
   - id: COMP-KVS
     type: comp
     title: persistency::kvs
-    status: approved
+    status: valid
     description: >
       Key-value store implementation of the persistency feature.
       Eclipse: comp__persistency_kvs.
@@ -56,7 +56,7 @@ artifacts:
   - id: LOGIC-ARC-INT-KVS
     type: logic-arc-int
     title: KVS Interface
-    status: approved
+    status: valid
     description: >
       Logical interface of the key-value store: store / load / delete /
       snapshot operations over (key, value) pairs.
@@ -69,7 +69,7 @@ artifacts:
   - id: LOGIC-ARC-INT-OP-KVS-STORE
     type: logic-arc-int
     title: Store
-    status: approved
+    status: valid
     description: Persist a (key, value) pair durably.
     fields:
       safety-level: ASIL_B
@@ -82,7 +82,7 @@ artifacts:
   - id: LOGIC-ARC-INT-OP-KVS-LOAD
     type: logic-arc-int
     title: Load
-    status: approved
+    status: valid
     description: Retrieve a previously-stored value by key, with integrity check.
     fields:
       safety-level: ASIL_B
@@ -95,7 +95,7 @@ artifacts:
   - id: LOGIC-ARC-INT-OP-KVS-DELETE
     type: logic-arc-int
     title: Delete
-    status: approved
+    status: valid
     description: Remove a key-value pair durably.
     fields:
       safety-level: ASIL_B
@@ -108,7 +108,7 @@ artifacts:
   - id: LOGIC-ARC-INT-OP-KVS-SNAPSHOT-CREATE
     type: logic-arc-int
     title: Create Snapshot
-    status: approved
+    status: valid
     description: Atomically capture the current state of the KVS.
     fields:
       safety-level: ASIL_B
@@ -121,7 +121,7 @@ artifacts:
   - id: LOGIC-ARC-INT-OP-KVS-SNAPSHOT-RESTORE
     type: logic-arc-int
     title: Restore Snapshot
-    status: approved
+    status: valid
     description: Atomically restore the KVS state from a prior snapshot.
     fields:
       safety-level: ASIL_B
@@ -136,7 +136,7 @@ artifacts:
   - id: DD-STA-KVS-KEY-VALIDATOR
     type: dd-sta
     title: Key validator
-    status: approved
+    status: valid
     description: >
       Static design of the syntactic key validator. Validates the
       alphabet, length boundaries, and leading-dot rejection.
@@ -151,7 +151,7 @@ artifacts:
   - id: DD-STA-KVS-BACKEND-STRATEGY
     type: dd-sta
     title: Storage backend strategy
-    status: approved
+    status: valid
     description: >
       Strategy pattern: `KvsBackend` trait with two implementations
       (RocksDb for production, InMemory for tests).
@@ -166,7 +166,7 @@ artifacts:
   - id: DD-DYN-KVS-ATOMIC-STORE
     type: dd-dyn
     title: Atomic store sequence
-    status: approved
+    status: valid
     description: >
       Sequence design for the atomic store path: WAL append → fsync
       → live-table update → log rotation. Power-loss between any
@@ -184,7 +184,7 @@ artifacts:
   - id: SW-UNIT-KVS-VALIDATOR
     type: sw-unit
     title: KVS key validator implementation
-    status: approved
+    status: valid
     description: Rust source implementing the syntactic key validator.
     fields:
       safety-level: ASIL_B
@@ -200,7 +200,7 @@ artifacts:
   - id: SW-UNIT-KVS-BACKEND
     type: sw-unit
     title: KVS RocksDB backend implementation
-    status: approved
+    status: valid
     description: Rust source implementing the RocksDB-backed `KvsBackend`.
     fields:
       safety-level: ASIL_B
@@ -216,7 +216,7 @@ artifacts:
   - id: SW-UNIT-KVS-ATOMIC-STORE
     type: sw-unit
     title: KVS atomic-store implementation
-    status: approved
+    status: valid
     description: Rust source implementing the WAL-based atomic store.
     fields:
       safety-level: ASIL_B
