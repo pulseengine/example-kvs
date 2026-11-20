@@ -68,6 +68,24 @@ jobs:
       - name: bazel build (AADL → WIT → wit-bindgen → wasm component)
         run: bazel build //...
 
+      - name: stale-lock control (--lockfile_mode=error must fire)
+        # Plants a bazel_dep that MODULE.bazel.lock does not contain and
+        # expects bazel to refuse it, then restores MODULE.bazel. Fails if
+        # error mode is ever switched off or the lock stops being checked.
+        shell: bash
+        run: |
+          set -uo pipefail
+          cp MODULE.bazel "$RUNNER_TEMP/MODULE.bazel.orig"
+          echo 'bazel_dep(name = "abseil-py", version = "2.1.0")' >> MODULE.bazel
+          bazel mod deps > "$RUNNER_TEMP/stale.log" 2>&1; rc=$?
+          cp "$RUNNER_TEMP/MODULE.bazel.orig" MODULE.bazel
+          git diff --exit-code -- MODULE.bazel MODULE.bazel.lock
+          if [ "$rc" -eq 0 ]; then echo "lockfile_mode=error did not fire on a stale lock"; exit 1; fi
+          if ! grep -q 'not permitted with --lockfile_mode=error' "$RUNNER_TEMP/stale.log"; then
+            cat "$RUNNER_TEMP/stale.log"; exit 1
+          fi
+          echo "stale lock rejected (bazel exit $rc)"
+
       - name: verify.py bucketing self-test (rivet and bazel stubbed)
         run: python3 -m unittest discover -s tools -p 'test_verify.py' -v
 
