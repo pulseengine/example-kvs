@@ -4,6 +4,10 @@
 #   3. `python tools/verify.py` artifact-driven verification gate
 #      (drives bazel test per comp-req's verified-by entries)
 #
+# Bazel runs locked: .bazelrc sets --lockfile_mode=error against the
+# committed MODULE.bazel.lock (Bazel pinned in .bazelversion), and
+# `cargo audit` checks every tracked Cargo.lock.
+#
 # Note: CI may go RED on purpose. The verify gate runs surface tests
 # against the vendored eclipse-score rust_kvs sources. Some of those
 # tests assert spec compliance the upstream impl does not enforce;
@@ -36,6 +40,19 @@ jobs:
               --tag v0.41.1 \
               rivet-cli --bin rivet --locked
           rivet --version
+
+      - name: cargo audit (every tracked Cargo.lock)
+        # Loops over git ls-files so a nested Cargo.lock added later is
+        # audited without editing this step. Fails on a vulnerability
+        # advisory; "unsound"/"unmaintained" warnings are reported only.
+        run: |
+          cargo install cargo-audit --version 0.22.1 --locked
+          locks=$(git ls-files -- 'Cargo.lock' '**/Cargo.lock')
+          test -n "$locks"
+          for lock in $locks; do
+            echo "== $lock"
+            cargo audit --file "$lock"
+          done
 
       - name: Install PyYAML for verify.py
         run: pip install pyyaml
