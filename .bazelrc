@@ -24,6 +24,11 @@
 # `make verify VARIANT=prod` passes `--config=prod` through; same for `make bazel`.
 
 # ── default settings ─────────────────────────────────────────────────
+# MODULE.bazel.lock is committed and must match MODULE.bazel, Cargo.toml
+# and Cargo.lock. After changing any of them, refresh it with
+#   bazel mod deps --lockfile_mode=update && bazel build //... --lockfile_mode=update
+# and commit the result.
+common --lockfile_mode=error
 build --java_language_version=17
 test --test_output=errors
 
