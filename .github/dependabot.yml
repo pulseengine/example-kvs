@@ -1,8 +1,26 @@
 version: 2
+# Grouped monthly updates (fleet template from pulseengine/rivet, owner
+# decision 2026-11-21): monthly on the 1st at 02:00 UTC, at most 2 open PRs,
+# 7-day cooldown after a release, all actions in one group. Security
+# updates ignore the schedule and the limit.
+#
+# No cargo entry yet. Bazel runs with --lockfile_mode=error, so a Dependabot
+# Cargo.lock bump without a regenerated MODULE.bazel.lock would fail CI. The
+# cargo entry is added after the fleet's verify-only MODULE.bazel.lock check
+# for Dependabot cargo branches lands here.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+      time: "02:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
     labels:
       - dependencies
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
