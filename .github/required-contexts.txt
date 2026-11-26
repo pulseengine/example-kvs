@@ -1,4 +1,1 @@
-# Required status checks on main. Mirrors the required_status_checks rule in
-# ruleset temper-default-branch-protection (16803778); change both together.
-# One context per line, exactly as the check run is named.
 rivet + bazel + verify
