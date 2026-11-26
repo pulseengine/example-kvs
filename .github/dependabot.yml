@@ -36,6 +36,12 @@ updates:
     cooldown:
       default-days: 7
     versioning-strategy: lockfile-only
+    ignore:
+      # Held at 0.46.x: the wit-bindgen runtime must match the bindings
+      # rules_wasm_component 1.0.0 generates. Moving both together is #21;
+      # drop this ignore then.
+      - dependency-name: wit-bindgen
+        versions: [">= 0.47"]
     labels:
       - dependencies
     groups:
