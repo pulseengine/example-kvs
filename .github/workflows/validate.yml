@@ -65,6 +65,13 @@ jobs:
       - name: rivet validate (typed-artifact graph check)
         run: make validate
 
+      - name: MODULE.bazel.lock is current (fix commands + regenerated lock on failure)
+        # synth's verify-only check (synth#1795). On a stale lock it writes the
+        # fix commands to the step summary and uploads the lock a Linux runner
+        # accepts as the module-bazel-lock artifact. A Dependabot cargo PR
+        # goes red here until someone pushes that lock in a signed commit.
+        uses: pulseengine/synth/.github/actions/bazel-lock-check@f6b2b3a45a7c9f71378e9b78d8fab5f82d838a9e # main 2026-11-26
+
       - name: bazel build (AADL → WIT → wit-bindgen → wasm component)
         run: bazel build //...
 
