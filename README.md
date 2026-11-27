@@ -1,5 +1,7 @@
 # `example-kvs`
 
+> **Archived 2026-11-27: no longer maintained.**
+
 [![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 > A [pulseengine.eu](https://pulseengine.eu) worked example: eclipse-score's
